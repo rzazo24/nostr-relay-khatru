@@ -59,6 +59,9 @@ against a real running binary — mirror that when changing behavior.
   stops live delivery, and `NewPrivateFilter` answers `auth-required:` only to filters aimed
   *exclusively* at private kinds (so clients authenticate and retry). Generic filters are served
   minus the private events instead of rejected. `OnConnect` sends an AUTH challenge.
+  **Verified with a real client (Damus on iOS, 2026-09-29):** a kind-4 DM published through this relay was
+  read by the recipient account after Damus answered the `auth-required:` challenge with NIP-42 (the log showed one
+  `reject filter kind=4 … auth-required`, then successful authentications and no repeat).
 - **NIP-70** (protected events) is implemented by khatru itself — don't add a policy for it.
 - `internal/server/activity.go`: the activity log. Policies are wrapped by `logEvent`/`logFilter`
   (they never change the decision); rejections are logged capped per reason per minute plus a

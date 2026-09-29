@@ -97,6 +97,15 @@ authenticates right after connecting, the challenge arrives asynchronously — `
 
 ## Deployment
 
+**Landing page** (`static/index.html` + `landing.css` + `landing.js`): the Caddyfile serves it for `GET`/`HEAD` of `/` that
+are NOT NIP-11 (`Accept: application/nostr+json`), NOT WebSocket (`Upgrade`/`Connection`) — NIP-86 `POST`s also skip it
+(`method GET HEAD`). Because that matcher doesn't require `Accept: text/html`, plain `curl`, browsers and uptime monitors all
+get a 200 page (an early version required text/html, so a monitor sending `*/*` would have reached the relay's 404).
+`+Vary Accept` is set since one URL returns different things. The page has a strict CSP (`script-src 'self'`, no inline) and
+inserts everything from NIP-11 with `textContent` — keep that: the name/description can be changed live via NIP-86. The npub
+shown in the footer is bech32-encoded in `landing.js` (verified against nostr-tools). Static files are a *directory* bind mount
+(edits go live at once); the Caddyfile is a *file* mount, so after editing it run `docker compose up -d --force-recreate caddy`.
+
 `static/` holds the relay icon (`icon.svg` is the source, `icon.png` 512×512 is what is advertised —
 rendered with headless Chromium since no SVG converter is installed). Caddy serves `/icon.png` and
 `/icon.svg` from it (mounted read-only at `/srv/static`); `RELAY_ICON=/icon.png` puts it in NIP-11, and

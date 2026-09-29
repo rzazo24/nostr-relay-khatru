@@ -23,6 +23,7 @@ type Config struct {
 	PubKey      string // hex, opcional; también es el dueño que puede usar la API de gestión NIP-86
 	Contact     string // opcional
 	PublicURL   string // URL pública https del relé (para NIP-42/NIP-86); vacío = se deduce de la petición
+	Icon        string // icono del relé (NIP-11): URL absoluta o ruta relativa a la URL pública (p. ej. /icon.png)
 
 	// Límites por evento.
 	MaxContentLength int           // caracteres (runas) del content
@@ -62,6 +63,7 @@ func Load(get func(string) string) (Config, error) {
 		PubKey:              get("RELAY_PUBKEY"),
 		Contact:             get("RELAY_CONTACT"),
 		PublicURL:           strings.TrimRight(get("RELAY_PUBLIC_URL"), "/"),
+		Icon:                strings.TrimSpace(get("RELAY_ICON")),
 		PrivateKinds:        []int{4, 1059},
 		MaxContentLength:    65536,
 		MaxEventTags:        2000,

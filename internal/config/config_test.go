@@ -33,12 +33,13 @@ func TestLoad_NIP13And42Options(t *testing.T) {
 		"RELAY_AUTH_REQUIRED":         "true",
 		"RELAY_PRIVATE_KINDS":         "4, 1059,14",
 		"RELAY_PUBLIC_URL":            "https://relay.example.com/",
+		"RELAY_ICON":                  " /icon.png ",
 		"RELAY_MAX_NEGENTROPY_EVENTS": "5000",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.MinPoW != 20 || !c.AuthRequired || len(c.PrivateKinds) != 3 || c.PublicURL != "https://relay.example.com" || c.MaxNegentropyEvents != 5000 {
+	if c.MinPoW != 20 || !c.AuthRequired || len(c.PrivateKinds) != 3 || c.PublicURL != "https://relay.example.com" || c.Icon != "/icon.png" || c.MaxNegentropyEvents != 5000 {
 		t.Fatalf("opciones mal leídas: %+v", c)
 	}
 	none, err := Load(env(map[string]string{"RELAY_PRIVATE_KINDS": "none"}))

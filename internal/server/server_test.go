@@ -182,6 +182,17 @@ func TestNIP11_AdvertisesOnlyWhatIsEnabled(t *testing.T) {
 	}
 }
 
+func TestNIP11_IconRelativePathIsResolvedAgainstThePublicURL(t *testing.T) {
+	_, ts := start(t, map[string]string{"RELAY_ICON": "/icon.png"})
+	if got := nip11Doc(t, ts)["icon"]; got != ts.URL+"/icon.png" {
+		t.Fatalf("icon: %v, se esperaba %s/icon.png", got, ts.URL)
+	}
+	_, ts = start(t, map[string]string{"RELAY_ICON": "https://example.com/logo.webp"})
+	if got := nip11Doc(t, ts)["icon"]; got != "https://example.com/logo.webp" {
+		t.Fatalf("una URL absoluta se deja tal cual: %v", got)
+	}
+}
+
 // ---------- NIP-13 ----------
 
 func TestNIP13_RequiresProofOfWork(t *testing.T) {

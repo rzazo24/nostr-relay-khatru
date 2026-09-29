@@ -97,6 +97,12 @@ authenticates right after connecting, the challenge arrives asynchronously — `
 
 ## Deployment
 
+`static/` holds the relay icon (`icon.svg` is the source, `icon.png` 512×512 is what is advertised —
+rendered with headless Chromium since no SVG converter is installed). Caddy serves `/icon.png` and
+`/icon.svg` from it (mounted read-only at `/srv/static`); `RELAY_ICON=/icon.png` puts it in NIP-11, and
+khatru resolves relative icon paths against the public URL. The Caddyfile is a single-file bind mount:
+after editing it, `docker compose up -d --force-recreate caddy`.
+
 Running in production on the author's Oracle Cloud VPS (arm64) at `wss://relay.hivescope.xyz`
 via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, description,
 `RELAY_PUBLIC_URL`, `RELAY_PUBKEY` = the owner's key for NIP-86). `docker compose up -d --force-recreate relay`

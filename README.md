@@ -114,6 +114,7 @@ optional except `RELAY_DOMAIN` when using Docker.
 | `RELAY_NAME`, `RELAY_DESCRIPTION`, `RELAY_CONTACT` | | NIP-11 document |
 | `RELAY_PUBKEY` | | Owner's public key (hex): NIP-11 `pubkey` and the only one allowed to use NIP-86 |
 | `RELAY_PUBLIC_URL` | *(deduced)* | Public https URL, for NIP-42/NIP-98 |
+| `RELAY_ICON` | | Relay icon for NIP-11: an absolute URL, or a path like `/icon.png` (served by Caddy from `./static`) |
 | `RELAY_MAX_CONTENT_LENGTH` | `65536` | Characters in `content` |
 | `RELAY_MAX_EVENT_TAGS` | `2000` | Tags per event |
 | `RELAY_MAX_TAG_VALUE_BYTES` | `1024` | Bytes in each tag element |
@@ -129,6 +130,10 @@ optional except `RELAY_DOMAIN` when using Docker.
 | `RELAY_CONNS_PER_MINUTE` / `_BURST` | `20` / `60` | Connections per IP |
 
 An invalid value stops the relay at startup with an error naming the variable.
+
+## Relay icon
+
+Clients show the NIP-11 `icon`. Put a square image (PNG/JPG/WebP, ~512×512, small) in `static/`, set `RELAY_ICON=/icon.png` and Caddy serves it at `https://<RELAY_DOMAIN>/icon.png` (the `static/icon.png` and `static/icon.svg` here are the ones used by the public instance). Prefer PNG: many native apps can't render SVG. NIP-86's `changerelayicon` overrides it live.
 
 ## Operations
 

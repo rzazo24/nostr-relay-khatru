@@ -192,6 +192,7 @@ func (s *Server) setupInfo(version string) {
 	info.Description = cfg.Description
 	info.PubKey = cfg.PubKey
 	info.Contact = cfg.Contact
+	info.Icon = cfg.Icon // si es una ruta relativa, khatru la resuelve contra la URL pública
 	info.Software = "https://github.com/rzazo24/nostr-relay-khatru"
 	info.Version = version
 

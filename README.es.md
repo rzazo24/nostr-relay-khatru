@@ -112,6 +112,7 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 | `RELAY_NAME`, `RELAY_DESCRIPTION`, `RELAY_CONTACT` | | Documento NIP-11 |
 | `RELAY_PUBKEY` | | Clave pública del dueño (hex): `pubkey` de NIP-11 y la única que puede usar NIP-86 |
 | `RELAY_PUBLIC_URL` | *(se deduce)* | URL pública https, para NIP-42/NIP-98 |
+| `RELAY_ICON` | | Icono del relé para NIP-11: una URL absoluta, o una ruta como `/icon.png` (que Caddy sirve desde `./static`) |
 | `RELAY_MAX_CONTENT_LENGTH` | `65536` | Caracteres del `content` |
 | `RELAY_MAX_EVENT_TAGS` | `2000` | Tags por evento |
 | `RELAY_MAX_TAG_VALUE_BYTES` | `1024` | Bytes de cada elemento de un tag |
@@ -127,6 +128,10 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 | `RELAY_CONNS_PER_MINUTE` / `_BURST` | `20` / `60` | Conexiones por IP |
 
 Un valor inválido detiene el relé al arrancar con un error que nombra la variable.
+
+## Icono del relé
+
+Los clientes muestran el `icon` de NIP-11. Pon una imagen cuadrada (PNG/JPG/WebP, ~512×512, ligera) en `static/`, define `RELAY_ICON=/icon.png` y Caddy la sirve en `https://<RELAY_DOMAIN>/icon.png` (`static/icon.png` y `static/icon.svg` son los de la instancia pública). Mejor PNG: muchas apps nativas no renderizan SVG. `changerelayicon` de NIP-86 lo cambia en caliente.
 
 ## Operación
 

@@ -1,0 +1,14 @@
+# Go
+/nostr-relay-khatru
+*.exe
+*.test
+*.out
+
+# Base de datos local (SQLite)
+/data/
+
+# Node (pruebas de humo)
+node_modules/
+
+# Entornos / secretos
+.env

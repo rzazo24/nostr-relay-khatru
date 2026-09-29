@@ -1,0 +1,6 @@
+# TLS automático (Let's Encrypt) y proxy inverso al relé. El dominio sale de
+# RELAY_DOMAIN (.env). Caddy pasa X-Forwarded-For, que el relé usa para aplicar los
+# límites de velocidad por IP real de cada cliente.
+{$RELAY_DOMAIN} {
+	reverse_proxy relay:3334
+}

@@ -1,0 +1,65 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# El relé no publica ningún puerto en el host: solo es accesible desde Caddy por
+# la red interna. Caddy termina TLS (Let's Encrypt) para RELAY_DOMAIN (ver .env).
+services:
+  relay:
+    build: .
+    container_name: nostr-relay-khatru
+    restart: unless-stopped
+    logging: *default-logging
+    # Todo lo configurable está en .env.example; los que no pongas usan su valor por defecto.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RELAY_DB_PATH: /app/data/relay.sqlite
+      RELAY_LISTEN_ADDR: ":3334"
+    volumes:
+      - relay-data:/app/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "/app/nostr-relay-khatru", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: nostr-relay-caddy
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      relay:
+        condition: service_healthy
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?define RELAY_DOMAIN en .env (por ejemplo relay.example.com)}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+networks:
+  internal:
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,14 @@
+{
+  "name": "nostr-relay-khatru-tests",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Prueba de humo de nostr-relay-khatru contra un relé real: publicar, consultar, contar, borrar y límites.",
+  "scripts": {
+    "test": "node test-relay.mjs"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.10.4",
+    "ws": "^8.18.0"
+  }
+}

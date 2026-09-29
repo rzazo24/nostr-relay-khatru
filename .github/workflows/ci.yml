@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    name: Build, vet & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=1 go build ./...
+      - run: CGO_ENABLED=1 go vet ./...
+      - run: CGO_ENABLED=1 go test ./... -v
+
+  smoke-test:
+    name: End-to-end smoke test (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build relay
+        run: CGO_ENABLED=1 go build -o nostr-relay-khatru-ci .
+
+      - name: Start relay in the background
+        run: |
+          RELAY_DB_PATH="$RUNNER_TEMP/ci.sqlite" RELAY_LISTEN_ADDR=:3334 \
+          RELAY_EVENTS_PER_MINUTE=1000 RELAY_EVENTS_BURST=1000 \
+          RELAY_REQS_PER_MINUTE=1000 RELAY_REQS_BURST=1000 \
+            ./nostr-relay-khatru-ci > "$RUNNER_TEMP/relay.log" 2>&1 &
+
+          for i in $(seq 1 20); do
+            if curl -sf -H "Accept: application/nostr+json" http://localhost:3334/ > /dev/null; then
+              echo "relay is up"
+              exit 0
+            fi
+            sleep 0.5
+          done
+
+          echo "relay did not become ready in time" >&2
+          cat "$RUNNER_TEMP/relay.log" >&2
+          exit 1
+
+      - name: Check --healthcheck subcommand
+        run: RELAY_LISTEN_ADDR=:3334 ./nostr-relay-khatru-ci --healthcheck
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install test dependencies
+        working-directory: test
+        run: npm ci
+
+      - name: Run smoke test
+        working-directory: test
+        env:
+          RELAY_URL: ws://localhost:3334
+        run: npm test
+
+      - name: Show relay logs
+        if: always()
+        run: cat "$RUNNER_TEMP/relay.log" || true

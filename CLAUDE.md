@@ -18,6 +18,8 @@ CGO_ENABLED=1 go build ./... && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go t
 CGO_ENABLED=1 go run .                       # :3334, ./data/relay.sqlite
 go test ./internal/policies/ -run TestLimits_FutureSkew -v
 
+# integration tests start a real relay (internal/server): CGO_ENABLED=1 go test ./internal/server/
+
 # end-to-end smoke test (Node + nostr-tools). Start the relay with HIGH rate limits
 # first — the volume test publishes 130 events:
 RELAY_EVENTS_PER_MINUTE=1000 RELAY_EVENTS_BURST=1000 RELAY_REQS_PER_MINUTE=1000 RELAY_REQS_BURST=1000 CGO_ENABLED=1 go run . &
@@ -32,29 +34,61 @@ against a real running binary — mirror that when changing behavior.
 
 ## Architecture
 
-- `main.go` wires a `khatru.Relay` to the sqlite backend, the NIP-11 info document and
-  three policy hooks. **khatru stops at the first `RejectEvent` that rejects, so order
-  matters**: the IP rate limiter goes first (cheap), then `policies.NewEventLimits`.
+- `main.go` only loads config and starts `internal/server`, which builds the whole relay
+  (so integration tests can start it): sqlite backend, NIP-11 document, policy hooks, NIP-86.
+  **khatru stops at the first `RejectEvent` that rejects, so order matters**: IP rate
+  limiter, auth-required, moderation lists, `NewEventLimits` (sizes, skew, kinds,
+  expiration), then `NewPoW` last.
 - `internal/config` reads env vars (`RELAY_*`) through an injected `get` function so it
   is testable; invalid values fail startup with an error that names the variable.
-- `internal/policies/limits.go` — content length (runes, not bytes), tag count, tag
-  value size, `created_at` future skew, already-expired NIP-40 events, optional kind
-  allow-list (kind 5 deletions are always allowed). A limit of 0 disables it. Old
-  events are accepted on purpose (backfilling history).
+- `internal/policies`: `limits.go` (content length in runes, tag count/size, `created_at`
+  skew, already-expired NIP-40, static kind allow-list; 0 disables a limit; old events
+  accepted on purpose), `pow.go` (NIP-13: actual difficulty AND the target committed in the
+  `nonce` tag; kind 5 exempt), `moderation.go` (banned/allowed pubkeys, banned events,
+  kinds — via the small `Moderator` interface), `auth.go` (NIP-42 helpers and
+  `PrivateKinds`).
+- `internal/moderation` is the NIP-86 state: lists in tables of the SAME sqlite file
+  (a second connection, WAL) mirrored in memory for the hot path. Banning a pubkey removes
+  it from the allow list and vice versa; ≥1 allowed pubkey = write-restricted relay.
+- **NIP-86 auth**: only `RELAY_PUBKEY` (the owner) passes `RejectAPICall`; with it unset the
+  API is disabled. NIP-98 verifies the `u` tag against khatru's base URL (from
+  `RELAY_PUBLIC_URL`, else `X-Forwarded-*`).
+- **Private kinds** (`RELAY_PRIVATE_KINDS`, default 4 and 1059) are enforced in three places:
+  `Server.query` filters results by `PrivateKinds.Visible(event, viewer)` (skipped for
+  `khatru.IsInternalCall`, otherwise deleting your own DM wouldn't find it), `PreventBroadcast`
+  stops live delivery, and `NewPrivateFilter` answers `auth-required:` only to filters aimed
+  *exclusively* at private kinds (so clients authenticate and retry). Generic filters are served
+  minus the private events instead of rejected. `OnConnect` sends an AUTH challenge.
+- **NIP-70** (protected events) is implemented by khatru itself — don't add a policy for it.
 - `--healthcheck` subcommand: the binary requests its own NIP-11 document; used as the
   Docker healthcheck because the runtime image has no curl/wget.
 
+**The NIP-11 document must not lie**: `setupInfo` overrides khatru's default `supported_nips`
+(which advertises 42/70/86 unconditionally) with exactly what is enabled; 13 only if
+`RELAY_MIN_POW>0`, 86 only if `RELAY_PUBKEY` is set. `restricted_writes` follows the allow
+list live (via `OverwriteRelayInformation`). A test asserts the list.
+
 **The sqlite backend silently caps queries** (learned the hard way in hivescope-relay):
 by default every query returns at most 100 events and allows 10 tag values per filter,
-with no error — a client asking `limit: 500` gets 100. `main.go` sets the backend's
-`QueryLimit` to `RELAY_MAX_LIMIT` and `QueryTagsLimit` to 500, and wraps `QueryEvents`
-so filters without a `limit` (or above the max) get `RELAY_MAX_LIMIT`. The smoke test
-asserts that `limit: 500` returns 130 events; keep that test if you touch storage.
+with no error. The backend's `QueryLimit` is set to `max(RELAY_MAX_LIMIT,
+RELAY_MAX_NEGENTROPY_EVENTS)` and `Server.query` applies the real cap: `RELAY_MAX_LIMIT`
+normally, `RELAY_MAX_NEGENTROPY_EVENTS` when `eventstore.IsNegentropySession(ctx)` (an NIP-77
+session capped at 500 would sync incompletely and never say so).
+
+**go-nostr must stay ≥ v0.52**: khatru v0.19.1 pins v0.51.8, whose `nip77.ParseNegMessage`
+compares the label with its quotes still attached, so `NEG-OPEN` is never recognized and
+negentropy hangs. `go.mod` overrides it to v0.52.1. `TestNIP77_*` in `internal/server`
+fails (hangs) if this regresses.
 
 **IP rate limits depend on the proxy**: khatru takes the client IP from
 `X-Forwarded-For` (Caddy sets it). Without a proxy in front, everyone behind the same
 address shares one bucket. Limits are per IP: `RELAY_EVENTS_*`, `RELAY_REQS_*`,
 `RELAY_CONNS_*`.
+
+**Testing**: `internal/server/server_test.go` starts a real relay on an `httptest` server
+with sqlite in a temp dir and talks to it with the go-nostr client (AUTH, NIP-98-signed
+management calls, NEG sync, NIP-11). Rate limits are raised in `start()`. When a NIP-42 test
+authenticates right after connecting, the challenge arrives asynchronously — `keys.auth` retries.
 
 ## Deployment
 

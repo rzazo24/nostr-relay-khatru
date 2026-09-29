@@ -20,8 +20,9 @@ type Config struct {
 	// Documento NIP-11 (lo que ven los clientes al consultar el relé).
 	Name        string
 	Description string
-	PubKey      string // hex, opcional
+	PubKey      string // hex, opcional; también es el dueño que puede usar la API de gestión NIP-86
 	Contact     string // opcional
+	PublicURL   string // URL pública https del relé (para NIP-42/NIP-86); vacío = se deduce de la petición
 
 	// Límites por evento.
 	MaxContentLength int           // caracteres (runas) del content
@@ -32,6 +33,17 @@ type Config struct {
 
 	// Límites por consulta (REQ). MaxLimit acota el `limit` de cada filtro.
 	MaxLimit int
+	// Tope de eventos que se ofrecen a una sesión de sincronización NIP-77.
+	MaxNegentropyEvents int
+
+	// NIP-13: dificultad mínima de prueba de trabajo (bits a cero del id). 0 = desactivado.
+	MinPoW int
+
+	// NIP-42: AuthRequired exige autenticarse para leer y escribir. PrivateKinds son
+	// los kinds cuyo contenido solo ven su autor y el destinatario (tag p), siempre
+	// autenticado (por defecto los mensajes directos: 4 y 1059).
+	AuthRequired bool
+	PrivateKinds []int
 
 	// Límites de velocidad por IP: tokens por minuto y ráfaga máxima.
 	EventsPerMinute, EventsBurst int
@@ -43,18 +55,21 @@ type Config struct {
 // Devuelve un error que nombra la variable si algún valor no es válido.
 func Load(get func(string) string) (Config, error) {
 	c := Config{
-		ListenAddr:       str(get, "RELAY_LISTEN_ADDR", ":3334"),
-		DBPath:           str(get, "RELAY_DB_PATH", "./data/relay.sqlite"),
-		Name:             str(get, "RELAY_NAME", "nostr-relay-khatru"),
-		Description:      str(get, "RELAY_DESCRIPTION", "A small general-purpose Nostr relay built with khatru"),
-		PubKey:           get("RELAY_PUBKEY"),
-		Contact:          get("RELAY_CONTACT"),
-		MaxContentLength: 65536,
-		MaxEventTags:     2000,
-		MaxTagValueBytes: 1024,
-		MaxFutureSkew:    15 * time.Minute,
-		MaxLimit:         500,
-		EventsPerMinute:  30, EventsBurst: 60,
+		ListenAddr:          str(get, "RELAY_LISTEN_ADDR", ":3334"),
+		DBPath:              str(get, "RELAY_DB_PATH", "./data/relay.sqlite"),
+		Name:                str(get, "RELAY_NAME", "nostr-relay-khatru"),
+		Description:         str(get, "RELAY_DESCRIPTION", "A small general-purpose Nostr relay built with khatru"),
+		PubKey:              get("RELAY_PUBKEY"),
+		Contact:             get("RELAY_CONTACT"),
+		PublicURL:           strings.TrimRight(get("RELAY_PUBLIC_URL"), "/"),
+		PrivateKinds:        []int{4, 1059},
+		MaxContentLength:    65536,
+		MaxEventTags:        2000,
+		MaxTagValueBytes:    1024,
+		MaxFutureSkew:       15 * time.Minute,
+		MaxLimit:            500,
+		MaxNegentropyEvents: 100000,
+		EventsPerMinute:     30, EventsBurst: 60,
 		ReqsPerMinute: 60, ReqsBurst: 180,
 		ConnsPerMinute: 20, ConnsBurst: 60,
 	}
@@ -68,6 +83,7 @@ func Load(get func(string) string) (Config, error) {
 		{"RELAY_MAX_EVENT_TAGS", &c.MaxEventTags, 1},
 		{"RELAY_MAX_TAG_VALUE_BYTES", &c.MaxTagValueBytes, 1},
 		{"RELAY_MAX_LIMIT", &c.MaxLimit, 1},
+		{"RELAY_MAX_NEGENTROPY_EVENTS", &c.MaxNegentropyEvents, 1},
 		{"RELAY_EVENTS_PER_MINUTE", &c.EventsPerMinute, 1},
 		{"RELAY_EVENTS_BURST", &c.EventsBurst, 1},
 		{"RELAY_REQS_PER_MINUTE", &c.ReqsPerMinute, 1},
@@ -82,6 +98,35 @@ func Load(get func(string) string) (Config, error) {
 				return c, fmt.Errorf("%s: %q no es un entero >= %d", f.name, v, f.min)
 			}
 			*f.dst = n
+		}
+	}
+
+	if v := strings.TrimSpace(get("RELAY_MIN_POW")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 64 {
+			return c, fmt.Errorf("RELAY_MIN_POW: %q no es un entero entre 0 y 64 (0 = desactivado)", v)
+		}
+		c.MinPoW = n
+	}
+
+	if v := strings.TrimSpace(get("RELAY_AUTH_REQUIRED")); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return c, fmt.Errorf("RELAY_AUTH_REQUIRED: %q no es true/false", v)
+		}
+		c.AuthRequired = b
+	}
+
+	if v := strings.TrimSpace(get("RELAY_PRIVATE_KINDS")); v != "" {
+		c.PrivateKinds = nil
+		if strings.ToLower(v) != "none" {
+			for _, part := range strings.Split(v, ",") {
+				n, err := strconv.Atoi(strings.TrimSpace(part))
+				if err != nil || n < 0 {
+					return c, fmt.Errorf("RELAY_PRIVATE_KINDS: %q no es una lista de kinds separados por comas (o \"none\")", v)
+				}
+				c.PrivateKinds = append(c.PrivateKinds, n)
+			}
 		}
 	}
 

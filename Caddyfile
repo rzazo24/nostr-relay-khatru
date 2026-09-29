@@ -2,10 +2,34 @@
 # RELAY_DOMAIN (.env). Caddy pasa X-Forwarded-For, que el relé usa para aplicar los
 # límites de velocidad por IP real de cada cliente.
 {$RELAY_DOMAIN} {
-	# Icono del relé (RELAY_ICON=/icon.png): archivos estáticos de ./static
-	@icon path /icon.png /icon.svg
-	handle @icon {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		# la misma URL ("/") devuelve cosas distintas según Accept (página, NIP-11, WebSocket)
+		+Vary Accept
+	}
+
+	# Archivos estáticos: icono del relé (RELAY_ICON=/icon.png) y recursos de la página
+	@static path /icon.png /icon.svg /landing.css /landing.js
+	handle @static {
 		root * /srv/static
+		file_server
+	}
+
+	# Página de presentación: para cualquier GET de la raíz que NO sea un cliente de Nostr
+	# (Accept: application/nostr+json, NIP-11), ni un WebSocket, ni una llamada POST de la API
+	# NIP-86. Así también la ven un navegador sin Accept, curl o un monitor de disponibilidad.
+	@page {
+		method GET HEAD
+		path /
+		not header Accept *application/nostr+json*
+		not header Upgrade *
+		not header Connection *pgrade*
+	}
+	handle @page {
+		root * /srv/static
+		rewrite * /index.html
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 		file_server
 	}
 

@@ -129,6 +129,10 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 
 Un valor inválido detiene el relé al arrancar con un error que nombra la variable.
 
+## Página de presentación
+
+Al abrir la URL del relé en un navegador se ve una pequeña página de presentación (`static/index.html`, `landing.css`, `landing.js`; sin dependencias externas): nombre, icono y descripción del relé, su dirección `wss://` con un botón de copiar, los NIPs soportados, los límites y las reglas, en español e inglés. Se rellena sola con el documento NIP-11 del propio relé, así que siempre está al día. Caddy solo la sirve a los `GET` normales de `/`: los clientes de Nostr (`Accept: application/nostr+json`), los WebSockets y los `POST` de NIP-86 siguen llegando al relé sin tocar.
+
 ## Icono del relé
 
 Los clientes muestran el `icon` de NIP-11. Pon una imagen cuadrada (PNG/JPG/WebP, ~512×512, ligera) en `static/`, define `RELAY_ICON=/icon.png` y Caddy la sirve en `https://<RELAY_DOMAIN>/icon.png` (`static/icon.png` y `static/icon.svg` son los de la instancia pública). Mejor PNG: muchas apps nativas no renderizan SVG. `changerelayicon` de NIP-86 lo cambia en caliente.

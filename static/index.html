@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nostr relay</title>
+  <meta name="description" content="A public Nostr relay.">
+  <meta name="theme-color" content="#0B0F16">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="stylesheet" href="/landing.css">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <img id="icon" class="icon" src="/icon.png" alt="" width="72" height="72">
+      <div>
+        <h1 id="name">Nostr relay</h1>
+        <p id="status" class="status" role="status"><span class="dot" aria-hidden="true"></span><span id="status-text" data-i18n="checking">Checking…</span></p>
+      </div>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="es">ES</button>
+      </div>
+    </header>
+
+    <p id="description" class="lead"></p>
+
+    <section aria-labelledby="h-address">
+      <h2 id="h-address" data-i18n="address">Relay address</h2>
+      <div class="address">
+        <code id="address">wss://…</code>
+        <button type="button" id="copy" data-i18n="copy">Copy</button>
+      </div>
+      <p id="copied" class="hint" role="status" aria-live="polite"></p>
+      <p class="hint" data-i18n="howto">Add it to the relay list of your Nostr client (in most apps: Settings → Relays → add) and you can read and publish through it.</p>
+    </section>
+
+    <section aria-labelledby="h-nips">
+      <h2 id="h-nips" data-i18n="supports">What it supports</h2>
+      <ul id="nips" class="chips"></ul>
+    </section>
+
+    <section aria-labelledby="h-limits">
+      <h2 id="h-limits" data-i18n="limits">Limits</h2>
+      <dl id="limits" class="limits"></dl>
+    </section>
+
+    <section aria-labelledby="h-rules">
+      <h2 id="h-rules" data-i18n="rules">Rules and privacy</h2>
+      <ul class="rules">
+        <li data-i18n="rule-open">Open for reading and writing, no sign-up. Rate limits apply per IP; if it gets abused it will be tightened.</li>
+        <li data-i18n="rule-dm">Direct messages are only delivered to their sender and recipient after they authenticate (NIP-42).</li>
+        <li data-i18n="rule-log">The relay does not log message content or IP addresses.</li>
+        <li data-i18n="rule-public">Notes are public: anyone can read what you publish here, and other relays may hold copies.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p id="operator"></p>
+      <p><a id="software" href="https://github.com/rzazo24/nostr-relay-khatru" rel="noopener noreferrer" data-i18n="source">Source code</a><span id="version"></span></p>
+    </footer>
+  </main>
+  <script src="/landing.js"></script>
+</body>
+</html>

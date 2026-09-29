@@ -131,6 +131,10 @@ optional except `RELAY_DOMAIN` when using Docker.
 
 An invalid value stops the relay at startup with an error naming the variable.
 
+## Landing page
+
+Opening the relay's URL in a browser shows a small presentation page (`static/index.html`, `landing.css`, `landing.js`; no external dependencies): the relay's name, icon and description, its `wss://` address with a copy button, the supported NIPs, the limits and the rules, in English and Spanish. It fills itself in from the relay's own NIP-11 document, so it is always up to date. Caddy serves it only to plain `GET`s of `/` — Nostr clients (`Accept: application/nostr+json`), WebSockets and NIP-86 `POST`s still reach the relay untouched.
+
 ## Relay icon
 
 Clients show the NIP-11 `icon`. Put a square image (PNG/JPG/WebP, ~512×512, small) in `static/`, set `RELAY_ICON=/icon.png` and Caddy serves it at `https://<RELAY_DOMAIN>/icon.png` (the `static/icon.png` and `static/icon.svg` here are the ones used by the public instance). Prefer PNG: many native apps can't render SVG. NIP-86's `changerelayicon` overrides it live.

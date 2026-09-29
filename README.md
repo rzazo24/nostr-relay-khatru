@@ -137,7 +137,7 @@ An invalid value stops the relay at startup with an error naming the variable.
   days. Schedule it with cron yourself, e.g. `17 3 * * * /path/to/scripts/backup-db.sh`.
 - **Self-heal (optional)**: `./scripts/healthcheck.sh` restarts the containers after
   repeated failures. It is never installed automatically; read its header first.
-- **Logs**: `docker compose logs -f relay`.
+- **Logs**: `docker compose logs -f relay`. The relay logs what it *rejects* (`reject event kind=1 pubkey=ab12cd34 reason="rate-limited: …"`, at most 5 lines per reason per minute) and, when there was activity, a one-line summary per minute (`stats … saved=12 rejected=3 [rate-limited=3]`). It never logs content or IPs, only the kind, the first 8 characters of the pubkey and the reason — handy to see why a client (say Damus) is being refused.
 
 ## Caveats worth knowing
 

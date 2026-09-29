@@ -60,6 +60,11 @@ against a real running binary — mirror that when changing behavior.
   *exclusively* at private kinds (so clients authenticate and retry). Generic filters are served
   minus the private events instead of rejected. `OnConnect` sends an AUTH challenge.
 - **NIP-70** (protected events) is implemented by khatru itself — don't add a policy for it.
+- `internal/server/activity.go`: the activity log. Policies are wrapped by `logEvent`/`logFilter`
+  (they never change the decision); rejections are logged capped per reason per minute plus a
+  1-minute `stats` summary printed only when something happened (no timer: it rolls when the next
+  thing is logged). **Privacy rule: never log content, IPs or full pubkeys.** A test enforces it.
+  `LogOutput` is a package variable so tests can capture it.
 - `--healthcheck` subcommand: the binary requests its own NIP-11 document; used as the
   Docker healthcheck because the runtime image has no curl/wget.
 

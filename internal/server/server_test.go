@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -504,5 +505,46 @@ func TestNIP77_SyncsMoreEventsThanTheQueryLimit(t *testing.T) {
 	}
 	if len(got) != total {
 		t.Fatalf("la sincronización debería traer los %d eventos, trajo %d", total, len(got))
+	}
+}
+
+// ---------- registro de actividad ----------
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestActivityLog_RecordsRejectionsWithoutContentOrIPs(t *testing.T) {
+	out := &syncBuffer{}
+	prev := LogOutput
+	LogOutput = out
+	defer func() { LogOutput = prev }()
+
+	_, ts := start(t, map[string]string{"RELAY_MAX_CONTENT_LENGTH": "10"})
+	r := connect(t, ts)
+	k := newKeys()
+	if err := publish(r, k.event(1, "un texto secreto demasiado largo", nil)); err == nil {
+		t.Fatal("debería rechazarse")
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	log := out.String()
+	if !strings.Contains(log, "reject event kind=1 pubkey="+k.pk[:8]) || !strings.Contains(log, "too long") {
+		t.Fatalf("falta la línea de rechazo:\n%s", log)
+	}
+	if strings.Contains(log, "secreto") || strings.Contains(log, "127.0.0.1") || strings.Contains(log, k.pk) {
+		t.Fatalf("el registro no debe llevar el contenido, las IPs ni el pubkey completo:\n%s", log)
 	}
 }

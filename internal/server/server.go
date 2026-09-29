@@ -41,6 +41,7 @@ type Server struct {
 	cfg     config.Config
 	db      *sqlite3.SQLite3Backend
 	private policies.PrivateKinds
+	act     *activityLog
 }
 
 // New construye el relé. `version` aparece en el documento NIP-11.
@@ -65,7 +66,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		return nil, fmt.Errorf("no se pudo abrir la moderación en %q: %w", cfg.DBPath, err)
 	}
 
-	s := &Server{cfg: cfg, db: db, Store: store, private: policies.PrivateKinds(cfg.PrivateKinds)}
+	s := &Server{cfg: cfg, db: db, Store: store, private: policies.PrivateKinds(cfg.PrivateKinds), act: newActivityLog(LogOutput, time.Now)}
 	relay := khatru.NewRelay()
 	s.Relay = relay
 	relay.ServiceURL = cfg.PublicURL
@@ -77,6 +78,20 @@ func New(cfg config.Config, version string) (*Server, error) {
 	// autenticarse sin esperar a que se le rechace una consulta. NIP-70 (eventos
 	// protegidos con el tag "-") ya lo implementa khatru por su cuenta.
 	relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
+	relay.OnConnect = append(relay.OnConnect, func(ctx context.Context) {
+		// cuenta las autenticaciones satisfechas (para el resumen, sin identificar a nadie)
+		go func() {
+			conn := khatru.GetConnection(ctx)
+			if conn == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+			case <-conn.Authed:
+				s.act.Authenticated()
+			}
+		}()
+	})
 
 	relay.StoreEvent = append(relay.StoreEvent, db.SaveEvent)
 	relay.QueryEvents = append(relay.QueryEvents, s.query)
@@ -88,27 +103,29 @@ func New(cfg config.Config, version string) (*Server, error) {
 	// más barato va primero: velocidad por IP, autenticación, moderación, tamaños y,
 	// por último, la prueba de trabajo.
 	relay.RejectEvent = append(relay.RejectEvent,
-		khatrupolicies.EventIPRateLimiter(cfg.EventsPerMinute, time.Minute, cfg.EventsBurst),
-		policies.NewAuthRequiredEvent(cfg.AuthRequired, khatru.GetAuthed),
-		policies.NewModeration(store),
-		policies.NewEventLimits(policies.EventLimits{
+		s.logEvent(khatrupolicies.EventIPRateLimiter(cfg.EventsPerMinute, time.Minute, cfg.EventsBurst)),
+		s.logEvent(policies.NewAuthRequiredEvent(cfg.AuthRequired, khatru.GetAuthed)),
+		s.logEvent(policies.NewModeration(store)),
+		s.logEvent(policies.NewEventLimits(policies.EventLimits{
 			MaxContentLength: cfg.MaxContentLength,
 			MaxEventTags:     cfg.MaxEventTags,
 			MaxTagValueBytes: cfg.MaxTagValueBytes,
 			MaxFutureSkew:    cfg.MaxFutureSkew,
 			AllowedKinds:     cfg.AllowedKinds,
-		}, time.Now),
-		policies.NewPoW(cfg.MinPoW),
+		}, time.Now)),
+		s.logEvent(policies.NewPoW(cfg.MinPoW)),
 	)
 	relay.RejectFilter = append(relay.RejectFilter,
-		khatrupolicies.FilterIPRateLimiter(cfg.ReqsPerMinute, time.Minute, cfg.ReqsBurst),
-		policies.NewAuthRequiredFilter(cfg.AuthRequired, khatru.GetAuthed),
-		s.private.NewPrivateFilter(khatru.GetAuthed),
+		s.logFilter(khatrupolicies.FilterIPRateLimiter(cfg.ReqsPerMinute, time.Minute, cfg.ReqsBurst)),
+		s.logFilter(policies.NewAuthRequiredFilter(cfg.AuthRequired, khatru.GetAuthed)),
+		s.logFilter(s.private.NewPrivateFilter(khatru.GetAuthed)),
 	)
 	relay.RejectCountFilter = append(relay.RejectCountFilter,
-		policies.NewAuthRequiredFilter(cfg.AuthRequired, khatru.GetAuthed),
-		s.private.NewPrivateFilter(khatru.GetAuthed),
+		s.logFilter(policies.NewAuthRequiredFilter(cfg.AuthRequired, khatru.GetAuthed)),
+		s.logFilter(s.private.NewPrivateFilter(khatru.GetAuthed)),
 	)
+	relay.OnEventSaved = append(relay.OnEventSaved, func(ctx context.Context, event *nostr.Event) { s.act.Saved() })
+	relay.OnEphemeralEvent = append(relay.OnEphemeralEvent, func(ctx context.Context, event *nostr.Event) { s.act.Ephemeral() })
 	relay.RejectConnection = append(relay.RejectConnection,
 		khatrupolicies.ConnectionRateLimiter(cfg.ConnsPerMinute, time.Minute, cfg.ConnsBurst),
 		func(r *http.Request) bool { return store.IsIPBlocked(khatru.GetIPFromRequest(r)) },
@@ -294,4 +311,30 @@ func (s *Server) setupManagementAPI() {
 	api.ChangeRelayName = func(ctx context.Context, v string) error { return st.SetSetting(settingName, v) }
 	api.ChangeRelayDescription = func(ctx context.Context, v string) error { return st.SetSetting(settingDescription, v) }
 	api.ChangeRelayIcon = func(ctx context.Context, v string) error { return st.SetSetting(settingIcon, v) }
+}
+
+// logEvent / logFilter envuelven una política para dejar constancia (sin contenido ni
+// IPs) de lo que rechaza. No cambian su decisión.
+func (s *Server) logEvent(p func(ctx context.Context, event *nostr.Event) (bool, string)) func(ctx context.Context, event *nostr.Event) (bool, string) {
+	return func(ctx context.Context, event *nostr.Event) (bool, string) {
+		reject, msg := p(ctx, event)
+		if reject {
+			s.act.Rejected("event", event.Kind, event.PubKey, msg)
+		}
+		return reject, msg
+	}
+}
+
+func (s *Server) logFilter(p func(ctx context.Context, filter nostr.Filter) (bool, string)) func(ctx context.Context, filter nostr.Filter) (bool, string) {
+	return func(ctx context.Context, filter nostr.Filter) (bool, string) {
+		reject, msg := p(ctx, filter)
+		if reject {
+			kind := -1
+			if len(filter.Kinds) == 1 {
+				kind = filter.Kinds[0]
+			}
+			s.act.Rejected("filter", kind, khatru.GetAuthed(ctx), msg)
+		}
+		return reject, msg
+	}
 }

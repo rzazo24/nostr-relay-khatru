@@ -135,7 +135,7 @@ Un valor inválido detiene el relé al arrancar con un error que nombra la varia
   días. Prográmalo tú en cron, por ejemplo `17 3 * * * /ruta/a/scripts/backup-db.sh`.
 - **Autorrecuperación (opcional)**: `./scripts/healthcheck.sh` reinicia los contenedores
   tras fallos repetidos. No se instala solo; lee antes su cabecera.
-- **Logs**: `docker compose logs -f relay`.
+- **Logs**: `docker compose logs -f relay`. El relé registra lo que *rechaza* (`reject event kind=1 pubkey=ab12cd34 reason="rate-limited: …"`, como mucho 5 líneas por motivo y minuto) y, si hubo actividad, un resumen de una línea por minuto (`stats … saved=12 rejected=3 [rate-limited=3]`). Nunca registra contenido ni IPs, solo el kind, los 8 primeros caracteres del pubkey y el motivo: útil para ver por qué se rechaza a un cliente (por ejemplo Damus).
 
 ## Advertencias que conviene conocer
 

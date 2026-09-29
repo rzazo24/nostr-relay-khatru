@@ -92,6 +92,14 @@ authenticates right after connecting, the challenge arrives asynchronously — `
 
 ## Deployment
 
+Running in production on the author's Oracle Cloud VPS (arm64) at `wss://relay.hivescope.xyz`
+via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, description,
+`RELAY_PUBLIC_URL`, `RELAY_PUBKEY` = the owner's key for NIP-86). `docker compose up -d --force-recreate relay`
+after editing `.env` (env_file is read when the container is created). A daily cron runs
+`scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`); the
+healthcheck script is **not** scheduled.
+
+
 `docker-compose.yml`: `relay` (no published port) behind `caddy` (TLS for
 `RELAY_DOMAIN`). `scripts/backup-db.sh` and `scripts/healthcheck.sh` are provided but
 **never installed automatically** (no cron is created) — the operator decides. The

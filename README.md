@@ -14,6 +14,9 @@ single-purpose relay for a chat linked to Hive accounts (now discontinued),
 keeping what was useful (rate limits, SQLite setup, Docker, backup) and dropping
 everything specific to that chat.
 
+**Public instance:** `wss://relay.hivescope.xyz` — open for reading and writing, with the
+rate limits described below. Please be kind to it; if it gets abused, it will be tightened.
+
 ## What it does
 
 - Speaks the core protocol and stores events in SQLite. Supported NIPs (and the

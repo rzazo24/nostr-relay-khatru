@@ -14,6 +14,9 @@ un solo propósito para un chat vinculado a cuentas de Hive (ya discontinuado),
 conservando lo que servía (límites de velocidad, SQLite, Docker, backup) y quitando
 todo lo específico de aquel chat.
 
+**Instancia pública:** `wss://relay.hivescope.xyz`: abierta para leer y escribir, con los
+límites de velocidad descritos más abajo. Trátala con cariño; si se abusa de ella, se endurecerá.
+
 ## Qué hace
 
 - Habla el protocolo y guarda los eventos en SQLite. NIPs soportados (y el documento NIP-11

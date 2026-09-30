@@ -113,6 +113,12 @@ CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or 
 Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
 
+**Built-in help** (`<dialog id="help">` in `static/admin/index.html`, static Spanish HTML; opened by the *Ayuda* button and the `?`
+/`data-help="h-…"` buttons next to each section title, scrolling inside the dialog — the TOC links are intercepted so the URL
+doesn't change). **When you add a card, config field or moderation box, add its explanation to the help**: a Playwright check
+once verified that every `.card .l`, `#config dt` and `#mod h3` label appears in the help text. The NIP list in the help is static
+text — update it if the supported NIPs change.
+
 **Phase 2 — moderation from the panel** (`internal/admin/mod.go`): `GET /admin/api/moderation` (lists, effective info, defaults,
 overrides) and `POST /admin/api/mod/{ban-pubkey,unban-pubkey,allow-pubkey,unallow-pubkey,ban-event,unban-event,kind,ip,info}`.
 Mutations go through `Panel.mutation`: valid session + `Sec-Fetch-Site` same-origin/none + `Origin` equal to ours +

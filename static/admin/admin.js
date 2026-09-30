@@ -317,6 +317,24 @@ $('info-reset').addEventListener('click', async () => {
   await act('info', { reset: ['name', 'description', 'icon'] }, 'Restaurados los de la configuración', { forceInfo: true })
 })
 
+// ---------- ayuda ----------
+
+const helpDialog = $('help')
+function openHelp(anchor) {
+  if (!helpDialog.open) helpDialog.showModal()
+  const target = anchor && document.getElementById(anchor)
+  // el contenido se desplaza dentro del diálogo; sin ancla, se vuelve arriba
+  if (target) target.scrollIntoView({ block: 'start' })
+  else $('help-body').scrollTop = 0
+}
+$('help-btn').addEventListener('click', () => openHelp())
+$('help-close').addEventListener('click', () => helpDialog.close())
+// clic fuera del cuadro (en el fondo oscuro) cierra
+helpDialog.addEventListener('click', (e) => { if (e.target === helpDialog) helpDialog.close() })
+// los enlaces del índice se desplazan dentro del diálogo sin cambiar la URL
+document.querySelectorAll('.toc a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); document.getElementById(a.getAttribute('href').slice(1)).scrollIntoView({ block: 'start' }) }))
+document.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => openHelp(b.dataset.help)))
+
 // ---------- arranque ----------
 
 $('login-btn').addEventListener('click', login)

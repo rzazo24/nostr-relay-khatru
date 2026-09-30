@@ -17,6 +17,7 @@
       </div>
       <div class="actions">
         <span id="updated" class="muted" aria-live="off"></span>
+        <button type="button" id="help-btn" class="ghost" aria-haspopup="dialog">Ayuda</button>
         <button type="button" id="refresh" hidden>Actualizar</button>
         <button type="button" id="logout" hidden>Cerrar sesión</button>
       </div>
@@ -33,9 +34,10 @@
 
     <div id="dash" hidden>
       <section class="cards" id="cards" aria-label="Resumen"></section>
+      <p class="muted small cards-help"><button type="button" class="linkish" data-help="h-cards">¿Qué significa cada número?</button></p>
 
       <section class="panel">
-        <h2>Actividad · últimos 60 minutos</h2>
+        <h2>Actividad · últimos 60 minutos <button type="button" class="q" data-help="h-activity" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <div id="chart" class="chart" role="img" aria-label="Actividad por minuto"></div>
         <p class="legend">
           <span><i class="sw saved"></i> guardados</span>
@@ -46,24 +48,24 @@
 
       <div class="cols">
         <section class="panel">
-          <h2>Eventos por tipo</h2>
+          <h2>Eventos por tipo <button type="button" class="q" data-help="h-kinds" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
           <div id="kinds"></div>
         </section>
         <section class="panel">
-          <h2>Rechazos</h2>
+          <h2>Rechazos <button type="button" class="q" data-help="h-rejections" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
           <div id="reasons" class="chips"></div>
           <div class="scroll"><table id="rejections"><thead><tr><th>Hora</th><th>Qué</th><th>Tipo</th><th>Clave</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
         </section>
       </div>
 
       <section class="panel">
-        <h2>Eventos recientes</h2>
+        <h2>Eventos recientes <button type="button" class="q" data-help="h-recent" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <p class="muted small">Contenido de las notas públicas, recortado. Los mensajes privados no muestran su contenido. Pulsa una clave para copiarla completa.</p>
         <ul id="recent" class="recent"></ul>
       </section>
 
       <section class="panel" id="mod">
-        <h2>Moderación</h2>
+        <h2>Moderación <button type="button" class="q" data-help="h-moderation" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <p class="muted small">Los cambios se aplican al momento y se guardan (sobreviven a reinicios). Tú, como dueño, nunca quedas bloqueado por estas listas.</p>
         <div class="modgrid">
           <div class="box">
@@ -129,11 +131,154 @@
       </section>
 
       <section class="panel">
-        <h2>Configuración</h2>
+        <h2>Configuración <button type="button" class="q" data-help="h-config" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <dl id="config" class="kv"></dl>
       </section>
     </div>
   </main>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <div class="help-head">
+      <h2 id="help-title">Ayuda del panel</h2>
+      <button type="button" id="help-close" aria-label="Cerrar la ayuda">Cerrar</button>
+    </div>
+    <div class="help-body" id="help-body">
+      <nav class="toc" aria-label="Índice">
+        <a href="#h-cards">Números de arriba</a>
+        <a href="#h-activity">Actividad</a>
+        <a href="#h-kinds">Eventos por tipo</a>
+        <a href="#h-rejections">Rechazos</a>
+        <a href="#h-recent">Eventos recientes</a>
+        <a href="#h-moderation">Moderación</a>
+        <a href="#h-config">Configuración</a>
+        <a href="#h-session">Sesión y seguridad</a>
+        <a href="#h-glossary">Glosario</a>
+      </nav>
+
+      <section id="h-cards">
+        <h3>Los números de arriba</h3>
+        <dl>
+          <dt>Eventos guardados</dt><dd>Cuántos eventos tiene el relé almacenados ahora mismo. Los eventos efímeros (ver «Actividad») no cuentan, porque no se guardan.</dd>
+          <dt>Claves distintas</dt><dd>Cuántas claves públicas diferentes han publicado algo que sigue guardado. Es una forma aproximada de saber cuánta gente distinta usa el relé.</dd>
+          <dt>Últimas 24 h</dt><dd>Cuántos de los eventos guardados tienen fecha de las últimas 24 horas.</dd>
+          <dt>Base de datos</dt><dd>Lo que ocupa en disco el archivo donde se guardan los eventos (incluye su registro temporal de escritura).</dd>
+          <dt>Conexiones abiertas</dt><dd>Clientes conectados en este momento. Una misma app puede abrir varias conexiones, así que no equivale exactamente a personas.</dd>
+          <dt>Rechazos desde el arranque</dt><dd>Publicaciones y consultas que el relé ha rechazado desde que se inició. Se pone a cero cuando el relé se reinicia. Un número alto no es malo por sí mismo: suele ser tráfico ajeno frenado por los límites de velocidad (mira «Rechazos»).</dd>
+        </dl>
+      </section>
+
+      <section id="h-activity">
+        <h3>Actividad · últimos 60 minutos</h3>
+        <p>Una barra por minuto. Colores: <b>turquesa</b> = eventos guardados, <b>azul</b> = eventos efímeros, <b>rojo</b> = rechazados. Pasa el ratón por encima de una barra para ver las cifras exactas de ese minuto (incluye también las autenticaciones).</p>
+        <p><b>Evento efímero</b>: un mensaje que el relé reenvía a quien esté escuchando pero no guarda. Sirve para cosas momentáneas (por ejemplo chats en vivo). No ocupa disco.</p>
+        <p>El histórico vive solo en memoria: si el relé se reinicia, la gráfica empieza de cero.</p>
+      </section>
+
+      <section id="h-kinds">
+        <h3>Eventos por tipo</h3>
+        <p>En Nostr cada evento tiene un número de <b>tipo</b> (en inglés, <i>kind</i>) que dice qué es. La tabla cuenta cuántos hay de cada uno. Los más habituales:</p>
+        <dl>
+          <dt>0 · Perfil</dt><dd>Nombre, foto y descripción de una cuenta.</dd>
+          <dt>1 · Nota</dt><dd>Un mensaje público normal.</dd>
+          <dt>3 · Contactos</dt><dd>A quién sigue una cuenta.</dd>
+          <dt>4 · Mensaje directo (antiguo)</dt><dd>Mensaje privado cifrado del formato antiguo. El relé solo lo entrega a su autor y a su destinatario.</dd>
+          <dt>5 · Borrado</dt><dd>Una cuenta pide retirar un evento suyo.</dd>
+          <dt>7 · Reacción</dt><dd>Un «me gusta» u otro emoji sobre una nota.</dd>
+          <dt>1059 · Gift wrap</dt><dd>Envoltorio de los mensajes privados modernos. También privado: solo lo ve su destinatario.</dd>
+          <dt>10002 · Lista de relés</dt><dd>Los relés que usa una cuenta (Damus lo publica al añadir un relé).</dd>
+          <dt>10050 · Relés de mensajes directos</dt><dd>Dónde quiere recibir una cuenta sus mensajes privados.</dd>
+          <dt>20001 · Efímero</dt><dd>Mensajes momentáneos de alguna aplicación; no se guardan.</dd>
+        </dl>
+        <p>Si ves un número sin nombre, es un tipo poco habitual; puedes buscarlo en la documentación de Nostr (los «NIPs»).</p>
+      </section>
+
+      <section id="h-rejections">
+        <h3>Rechazos</h3>
+        <p>Lista de lo que el relé ha dicho que no, con el motivo. Las etiquetas de arriba son los totales por tipo de motivo desde el arranque; la tabla son los últimos rechazos.</p>
+        <dl>
+          <dt>Hora / Qué</dt><dd>Cuándo, y si fue una <b>evento</b> (alguien quería publicar) o una <b>consulta</b> (alguien quería leer).</dd>
+          <dt>Tipo</dt><dd>El tipo de evento afectado; «—» si la consulta no pedía un tipo concreto.</dd>
+          <dt>Clave</dt><dd>Los 8 primeros caracteres de la clave pública que lo intentó (vacío si aún no se había autenticado). El panel nunca muestra IPs.</dd>
+        </dl>
+        <p>Motivos más habituales:</p>
+        <dl>
+          <dt>rate-limited</dt><dd>Demasiado rápido: esa conexión superó el límite de velocidad por IP. Es lo normal frente a aplicaciones que envían ráfagas de eventos efímeros; el límite hace su trabajo.</dd>
+          <dt>auth-required</dt><dd>Hace falta autenticarse (NIP-42). Lo verás sobre todo cuando un cliente pide mensajes privados antes de identificarse: el cliente se autentica y repite la petición.</dd>
+          <dt>invalid</dt><dd>El evento no cumple los límites: contenido demasiado largo, demasiados tags, fecha demasiado futura, ya caducado…</dd>
+          <dt>blocked</dt><dd>Lo veta la moderación: clave baneada, evento vetado o tipo prohibido.</dd>
+          <dt>restricted</dt><dd>La lista blanca está activa y esa clave no está en ella.</dd>
+          <dt>pow</dt><dd>No alcanza la prueba de trabajo exigida (solo si está activada).</dd>
+        </dl>
+      </section>
+
+      <section id="h-recent">
+        <h3>Eventos recientes</h3>
+        <p>Los 30 eventos guardados más nuevos, con el contenido recortado para poder juzgarlos de un vistazo. Es lo que miras para decidir si hay que moderar algo.</p>
+        <ul>
+          <li>Los <b>mensajes privados</b> no muestran contenido: el relé ni siquiera se lo manda al panel.</li>
+          <li>La etiqueta <b>tuyo</b> marca lo publicado con tu clave de dueño.</li>
+          <li>Pulsa la clave (en turquesa) para <b>copiarla entera</b>.</li>
+          <li><b>Vetar evento</b> borra ese evento y no deja que vuelva a publicarse. <b>Banear clave</b> impide que esa clave publique; la página pregunta si además quieres borrar todo lo suyo. Ambas se pueden deshacer desde «Moderación».</li>
+        </ul>
+      </section>
+
+      <section id="h-moderation">
+        <h3>Moderación</h3>
+        <p>Todo se aplica al momento y se guarda (sobrevive a reinicios). Tú, como dueño, <b>nunca quedas bloqueado</b> por estas listas y no puedes banearte a ti mismo.</p>
+        <dl>
+          <dt>Claves baneadas</dt><dd>Una clave baneada no puede publicar. Puedes pegar la clave como <code>npub…</code> o en hexadecimal. La casilla «borrar también sus eventos guardados» elimina lo que ya publicó (hasta 5 000 eventos). «Quitar» deshace el baneo.</dd>
+          <dt>Lista blanca de autores</dt><dd>Mientras está vacía, cualquiera puede publicar (relé abierto). En cuanto añades <b>una</b> clave, el relé pasa a ser de <b>escritura restringida</b>: solo publican las claves de la lista (y tú). Leer sigue siendo libre. Si quitas la última, vuelve a ser abierto. Úsala solo si quieres un relé privado o de comunidad; la página te avisa antes.</dd>
+          <dt>Eventos vetados</dt><dd>Un evento concreto, por su identificador (hex, <code>note1…</code> o <code>nevent1…</code>). Se borra si estaba guardado y no se vuelve a aceptar. Útil para contenido ilegal o molesto sin banear a toda la cuenta.</dd>
+          <dt>Tipos de evento</dt><dd><b>Prohibir</b> un tipo lo rechaza siempre (por ejemplo, un tipo con el que hay spam). <b>Permitir</b> es lo contrario y más estricto: en cuanto permites uno, SOLO pasan los tipos permitidos y se rechaza el resto (el borrado, tipo 5, siempre pasa). La página te avisa antes.</dd>
+          <dt>IPs bloqueadas</dt><dd>Bloquea una dirección IP para que no pueda conectarse. El relé no guarda IPs, así que esto sirve cuando ya conoces la dirección por otro sitio.</dd>
+          <dt>Información del relé</dt><dd>El nombre, la descripción y el icono que anuncia el relé y que muestran los clientes y la página de presentación. Para que la descripción salga en dos idiomas, escríbela como <code>English text | Texto en español</code>. «Restaurar» vuelve a los valores de la configuración. El icono puede ser una dirección <code>https://…</code> o una ruta como <code>/icon.png</code>; vacío = sin icono.</dd>
+        </dl>
+        <p>Cada acción deja una línea en el registro del relé (<code>admin action=…</code>), con solo los 8 primeros caracteres de la clave o del evento.</p>
+      </section>
+
+      <section id="h-config">
+        <h3>Configuración (solo lectura)</h3>
+        <p>Son los límites con los que trabaja el relé ahora. Aquí no se cambian: se modifican en el archivo de configuración del servidor y se reinicia el relé.</p>
+        <dl>
+          <dt>NIPs</dt><dd>Las especificaciones de Nostr que el relé soporta: 1 (protocolo básico), 9 (borrado), 11 (información del relé), 40 (caducidad), 42 (autenticación), 45 (conteo), 70 (eventos protegidos), 77 (sincronización) y 86 (gestión), más el 13 (prueba de trabajo) si está activada.</dd>
+          <dt>Contenido máx.</dt><dd>Caracteres máximos del texto de un evento.</dd>
+          <dt>Mensaje máx.</dt><dd>Tamaño máximo de un mensaje completo que envía un cliente (texto más etiquetas y firma).</dd>
+          <dt>Tags por evento</dt><dd>Cuántas etiquetas puede llevar un evento.</dd>
+          <dt>Eventos por consulta</dt><dd>Máximo de resultados que devuelve una petición de lectura.</dd>
+          <dt>Sync NIP-77 máx.</dt><dd>Máximo de eventos que se ofrecen en una sincronización con otro relé o cliente.</dd>
+          <dt>Fecha futura máx.</dt><dd>Cuánto puede adelantarse la fecha de un evento respecto al reloj del relé.</dd>
+          <dt>Prueba de trabajo</dt><dd>Un esfuerzo de cálculo que se exige al publicar, como antispam. «no» = desactivada.</dd>
+          <dt>Auth obligatoria</dt><dd>Si hace falta autenticarse para leer y escribir. «no» = solo para mensajes privados.</dd>
+          <dt>Tipos privados</dt><dd>Tipos de evento que solo ven su autor y su destinatario (mensajes directos).</dd>
+          <dt>Eventos/min por IP · Consultas/min por IP · Conexiones/min por IP</dt><dd>Límites de velocidad por dirección IP. El primer número son los permitidos por minuto; «ráfaga» es cuántos caben de golpe antes de empezar a frenar.</dd>
+        </dl>
+      </section>
+
+      <section id="h-session">
+        <h3>Sesión y seguridad</h3>
+        <ul>
+          <li>Entras firmando con la clave del dueño (extensión como nos2x). La clave privada nunca sale de la extensión.</li>
+          <li>La sesión dura una hora y se guarda en una cookie que la página no puede leer. «Cerrar sesión» la invalida al instante. Si caduca, el panel te lo dice y vuelve a la pantalla de entrada.</li>
+          <li>Los números se actualizan solos cada 15 segundos (mientras la pestaña está visible); «Actualizar» los refresca al momento.</li>
+          <li>El panel nunca muestra direcciones IP ni el contenido de los mensajes privados.</li>
+        </ul>
+      </section>
+
+      <section id="h-glossary">
+        <h3>Glosario</h3>
+        <dl>
+          <dt>Relé (relay)</dt><dd>Servidor que guarda y reparte los eventos de Nostr.</dd>
+          <dt>Evento</dt><dd>La unidad de todo en Nostr: una nota, un perfil, una reacción… firmada por su autor.</dd>
+          <dt>Clave pública · npub · hex</dt><dd>La identidad de una cuenta. <code>npub1…</code> es su forma legible; «hex» es la misma clave en 64 caracteres hexadecimales. Son equivalentes.</dd>
+          <dt>Tipo (kind)</dt><dd>El número que indica qué clase de evento es.</dd>
+          <dt>Tag (etiqueta)</dt><dd>Dato extra de un evento: a quién menciona, a qué responde, hashtags…</dd>
+          <dt>NIP</dt><dd>Cada una de las especificaciones de Nostr, numeradas (NIP-1, NIP-42…).</dd>
+          <dt>Efímero</dt><dd>Evento que se reenvía pero no se guarda.</dd>
+          <dt>Ráfaga</dt><dd>Cantidad que se permite de golpe antes de que empiece a actuar el límite de velocidad.</dd>
+        </dl>
+      </section>
+    </div>
+  </dialog>
   <script src="/admin/admin.js"></script>
 </body>
 </html>

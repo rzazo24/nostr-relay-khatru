@@ -100,6 +100,12 @@ authenticates right after connecting, the challenge arrives asynchronously — `
 
 ## Deployment
 
+**Reboot verified (2026-09-30)**: after a real server reboot both containers came back on their own (`restart: unless-stopped`,
+docker enabled at boot), Caddy reused its stored certificate, cron entries survived, `/tmp` was wiped (don't keep anything you
+need there) and Damus reconnected by itself. The public relay also receives real third-party traffic: ephemeral events
+(`kind 20001`, unknown app) that the per-IP limiter rejects in bursts — expected on an open relay; `disallowkind` via NIP-86 or
+`RELAY_ALLOWED_KINDS` would block them if ever wanted.
+
 **Bilingual description convention**: `RELAY_DESCRIPTION="English | Español"` (split on " | " in `landing.js`'s `pickLanguage`; any
 other clients simply show both). The production `.env` uses it. Editing `.env` needs `docker compose up -d --force-recreate relay`.
 

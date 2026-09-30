@@ -166,7 +166,7 @@
         <a href="#h-recent">Eventos recientes</a>
         <a href="#h-moderation">Moderación</a>
         <a href="#h-config">Configuración</a>
-        <a href="#h-session">Sesión y seguridad</a>
+        <a href="#h-session">Cabecera y sesión</a>
         <a href="#h-glossary">Glosario</a>
       </nav>
 
@@ -183,19 +183,33 @@
       </section>
 
       <section id="h-activity">
-        <h3>Actividad · últimos 60 minutos</h3>
-        <p>Elige el periodo con los botones: <b>60 min</b> (una barra por minuto, en directo), <b>24 h</b> y <b>7 días</b> (una barra por hora) o <b>30</b> y <b>90 días</b> (una barra por día). Las horas y los días son en <b>tu hora local</b> al mostrarlos.</p>
-        <p>Debajo de la gráfica hay un resumen del periodo: totales de eventos guardados, efímeros, rechazados y autenticaciones; los rechazos por motivo; el máximo de conexiones a la vez; y cómo han cambiado el tamaño de la base de datos y el número de eventos guardados (útil para prever el disco).</p>
-        <p><b>Dónde se guarda:</b> los periodos de más de una hora se guardan en la base de datos del relé, solo como <b>contadores por hora</b> (nada de contenido, claves ni IPs), y se conservan un año. Sobreviven a reinicios y a las actualizaciones. <b>Empiezan desde el día que se activó esta función</b>: lo anterior aparece a cero. La vista de 60 minutos sigue siendo en memoria.</p>
-        <p>Una barra por minuto (vista de 60 min). Colores: <b>turquesa</b> = eventos guardados, <b>azul</b> = eventos efímeros, <b>rojo</b> = rechazados. Pasa el ratón por encima de una barra para ver las cifras exactas de ese minuto (incluye también las autenticaciones).</p>
-        <p><b>Evento efímero</b>: un mensaje que el relé reenvía a quien esté escuchando pero no guarda. Sirve para cosas momentáneas (por ejemplo chats en vivo). No ocupa disco.</p>
-        <p>El histórico vive solo en memoria: si el relé se reinicia, la gráfica empieza de cero.</p>
+        <h3>Actividad</h3>
+        <p>La gráfica muestra cuánta actividad ha tenido el relé. Elige el periodo con los botones:</p>
+        <ul>
+          <li><b>60 min</b>: una barra por minuto, en directo. Vive solo en memoria: si el relé se reinicia, empieza de cero.</li>
+          <li><b>24 h</b> y <b>7 días</b>: una barra por hora.</li>
+          <li><b>30 días</b> y <b>90 días</b>: una barra por día.</li>
+        </ul>
+        <p>Las horas y los días se muestran en <b>tu hora local</b>. Los periodos largos se guardan en la base de datos del relé, solo como <b>contadores por hora</b> (nada de contenido, claves ni IPs), y se conservan un año. Sobreviven a reinicios y a actualizaciones, y <b>empiezan el día en que se activó esta función</b>: lo anterior aparece a cero.</p>
+        <p><b>Colores:</b> <span class="kw saved">turquesa</span> = eventos guardados, <span class="kw ephemeral">azul</span> = eventos efímeros, <span class="kw rejected">rojo</span> = rechazados. Pasa el ratón por una barra para ver sus cifras exactas (incluye las autenticaciones). Las barras van apiladas: su altura total es la suma de las tres.</p>
+        <p>Debajo de la gráfica hay un <b>resumen del periodo elegido</b>:</p>
+        <dl>
+          <dt>Guardados</dt><dd>Eventos que el relé aceptó y guardó en el periodo.</dd>
+          <dt>Efímeros</dt><dd>Eventos que el relé reenvió a quien escuchaba pero <b>no guardó</b> (mensajes momentáneos, por ejemplo chats en vivo). No ocupan disco.</dd>
+          <dt>Rechazados</dt><dd>Publicaciones y consultas que el relé rechazó (mira «Rechazos» para los motivos).</dd>
+          <dt>Autenticaciones</dt><dd>Veces que un cliente se identificó ante el relé (NIP-42). Es lo que hacen las aplicaciones para poder leer mensajes privados.</dd>
+          <dt>Conexiones máx. a la vez</dt><dd>El mayor número de conexiones abiertas a la vez que se vio en cualquier hora del periodo (en 60 min no aparece).</dd>
+          <dt>Rechazos por motivo</dt><dd>Los rechazos del periodo agrupados por motivo (sin disponibilidad en 60 min: para eso está el bloque «Rechazos»).</dd>
+          <dt>Base de datos</dt><dd>Tamaño al principio y al final del periodo y cuánto ha crecido. Sirve para prever cuándo se llenaría el disco.</dd>
+          <dt>Eventos guardados</dt><dd>Cuántos eventos había guardados al principio y al final del periodo y la diferencia. Puede bajar si la <b>retención</b> borra eventos viejos.</dd>
+        </dl>
+        <p>Si algún dato dice «—» o falta, es que en ese periodo aún no se había registrado (recuerda que el histórico empieza el día de la activación).</p>
       </section>
 
       <section id="h-growth">
         <h3>Crecimiento · eventos guardados por día</h3>
-        <p>Cuántos de los eventos que hay guardados se crearon cada día (fecha UTC) durante los últimos 14 días. Sirve para ver <b>a qué ritmo crece el relé</b> y prever cuánto disco va a ocupar.</p>
-        <p>Ojo: cuenta por la fecha del evento, no por cuándo llegó al relé. Y si activas la <b>retención</b> (ver «Configuración»), los días antiguos irán vaciándose a medida que se borran eventos viejos.</p>
+        <p>Cuántos de los eventos que hay guardados <b>ahora</b> se crearon cada día (fecha UTC) durante los últimos 14 días. Sirve para ver a qué ritmo crece el relé.</p>
+        <p>No es lo mismo que «Eventos guardados» del resumen de actividad: aquí se cuenta por la <b>fecha con la que se creó el evento</b>, no por cuándo llegó al relé, y solo entran los que siguen guardados (si la retención borra algo, desaparece de esta gráfica). Para ver el aumento real de tamaño usa «Base de datos» y «Eventos guardados» del resumen de actividad.</p>
       </section>
 
       <section id="h-kinds">
@@ -218,7 +232,7 @@
 
       <section id="h-rejections">
         <h3>Rechazos</h3>
-        <p>Lista de lo que el relé ha dicho que no, con el motivo. Las etiquetas de arriba son los totales por tipo de motivo desde el arranque; la tabla son los últimos rechazos.</p>
+        <p>Lista de lo que el relé ha dicho que no, con el motivo. Las etiquetas de arriba son los totales por tipo de motivo <b>desde el último arranque del relé</b> (se ponen a cero al reiniciar); la tabla son los últimos rechazos. Para los totales por motivo de un periodo más largo, mira el resumen bajo la gráfica de actividad (24 h o más).</p>
         <dl>
           <dt>Hora / Qué</dt><dd>Cuándo, y si fue una <b>evento</b> (alguien quería publicar) o una <b>consulta</b> (alguien quería leer).</dd>
           <dt>Tipo</dt><dd>El tipo de evento afectado; «—» si la consulta no pedía un tipo concreto.</dd>
@@ -280,11 +294,13 @@
       </section>
 
       <section id="h-session">
-        <h3>Sesión y seguridad</h3>
+        <h3>Cabecera y sesión</h3>
         <ul>
+          <li>Bajo el título ves la <b>versión</b> del relé (el identificador del código que está en marcha, por ejemplo <code>9cd2f05</code>) y <b>cuánto tiempo lleva en marcha</b> desde su último arranque.</li>
+          <li>«Actualizado a las…» indica cuándo se pidieron los datos por última vez. Se actualizan solos cada 15 segundos (mientras la pestaña está visible); <b>Actualizar</b> los refresca al momento.</li>
           <li>Entras firmando con la clave del dueño (extensión como nos2x). La clave privada nunca sale de la extensión.</li>
-          <li>La sesión dura una hora y se guarda en una cookie que la página no puede leer. «Cerrar sesión» la invalida al instante. Si caduca, el panel te lo dice y vuelve a la pantalla de entrada.</li>
-          <li>Los números se actualizan solos cada 15 segundos (mientras la pestaña está visible); «Actualizar» los refresca al momento.</li>
+          <li>La sesión dura una hora y se guarda en una cookie que la página no puede leer. <b>Cerrar sesión</b> la invalida al instante. Si caduca, el panel te lo dice y vuelve a la pantalla de entrada.</li>
+          <li>Tras cada acción de moderación aparece un <b>aviso</b> arriba con el resultado (verde) o el error (rojo).</li>
           <li>El panel nunca muestra direcciones IP ni el contenido de los mensajes privados.</li>
         </ul>
       </section>

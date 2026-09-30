@@ -138,7 +138,9 @@ creation date, last 14 days — *creation* date, not arrival) and the setting.
 **Built-in help** (`<dialog id="help">` in `static/admin/index.html`, static Spanish HTML; opened by the *Ayuda* button and the `?`
 /`data-help="h-…"` buttons next to each section title, scrolling inside the dialog — the TOC links are intercepted so the URL
 doesn't change). **When you add a card, config field or moderation box, add its explanation to the help**: a Playwright check
-once verified that every `.card .l`, `#config dt` and `#mod h3` label appears in the help text. The NIP list in the help is static
+once verified that every `.card .l`, `#config dt`, `#mod h3`, `#hist-summary dt` (open a long range tab first), tab name, header button and
+`#dash h2` title appears in the help text (46 labels) — re-run that check after changing the panel. The activity section must not claim the
+whole history is in memory: only the 60 min view is; 24 h+ is persisted (`internal/stats`). The NIP list in the help is static
 text — update it if the supported NIPs change.
 
 **Phase 2 — moderation from the panel** (`internal/admin/mod.go`): `GET /admin/api/moderation` (lists, effective info, defaults,

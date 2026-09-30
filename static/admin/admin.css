@@ -95,3 +95,5 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .tabs button[aria-pressed="true"] { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; }
 .axis { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; margin-top:2px; }
 .summary { margin-top:10px; }
+
+.kw { font-weight:700; } .kw.saved { color:var(--accent); } .kw.ephemeral { color:var(--blue); } .kw.rejected { color:#ff6b81; }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
 	"github.com/rzazo24/nostr-relay-khatru/internal/policies"
 	"github.com/rzazo24/nostr-relay-khatru/internal/retention"
+	"github.com/rzazo24/nostr-relay-khatru/internal/stats"
 )
 
 // Ajustes que se pueden cambiar en caliente con NIP-86 (changerelayname, etc.).
@@ -46,8 +48,10 @@ type Server struct {
 	private policies.PrivateKinds
 	act     *activityLog
 	panel   *admin.Panel
-	stop    context.CancelFunc // detiene las tareas de fondo (barrido de retención)
-	conns   atomic.Int64       // conexiones WebSocket abiertas ahora
+	stop    context.CancelFunc // detiene las tareas de fondo (retención, volcado de estadísticas)
+	stats   *stats.Store
+	done    sync.WaitGroup // espera a que acaben las tareas de fondo al cerrar
+	conns   atomic.Int64   // conexiones WebSocket abiertas ahora
 }
 
 // New construye el relé. `version` aparece en el documento NIP-11.
@@ -72,7 +76,11 @@ func New(cfg config.Config, version string) (*Server, error) {
 		return nil, fmt.Errorf("no se pudo abrir la moderación en %q: %w", cfg.DBPath, err)
 	}
 
-	s := &Server{cfg: cfg, db: db, Store: store, private: policies.PrivateKinds(cfg.PrivateKinds), act: newActivityLog(LogOutput, time.Now)}
+	statsStore, err := stats.Open(cfg.DBPath)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo preparar el histórico de estadísticas: %w", err)
+	}
+	s := &Server{cfg: cfg, db: db, Store: store, stats: statsStore, private: policies.PrivateKinds(cfg.PrivateKinds), act: newActivityLog(LogOutput, time.Now)}
 	relay := khatru.NewRelay()
 	s.Relay = relay
 	relay.ServiceURL = cfg.PublicURL
@@ -165,6 +173,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		Info:         s.effectiveInfo,
 		InfoDefaults: admin.InfoView{Name: cfg.Name, Description: cfg.Description, Icon: cfg.Icon},
 		Log:          s.act.Admin,
+		Stats:        statsStore,
 		Connections:  s.conns.Load,
 		Config:       s.panelConfig(),
 	})
@@ -178,6 +187,8 @@ func New(cfg config.Config, version string) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.stop = cancel
 	go retention.Start(ctx, s.db.QueryEvents, s.db.DeleteEvent, cfg.RetentionDays, cfg.PubKey, time.Hour, s.act.Retention)
+	s.done.Add(1)
+	go s.statsLoop(ctx)
 	return s, nil
 }
 
@@ -211,6 +222,8 @@ func (s *Server) panelConfig() map[string]any {
 // Close libera la moderación y el almacén.
 func (s *Server) Close() {
 	s.stop()
+	s.done.Wait() // deja que el volcado final de estadísticas termine antes de cerrar la base
+	s.stats.Close()
 	s.panel.Close()
 	s.Store.Close()
 	s.db.Close()
@@ -460,4 +473,57 @@ func (s *Server) effectiveInfo() admin.InfoView {
 // que borró. Lo usan las pruebas.
 func (s *Server) RunRetentionOnce(ctx context.Context) (retention.Result, error) {
 	return retention.SweepOnce(ctx, s.db.QueryEvents, s.db.DeleteEvent, time.Now(), s.cfg.RetentionDays, s.cfg.PubKey)
+}
+
+// statsLoop vuelca cada minuto la actividad contada a la base de datos (y una vez más al cerrar).
+func (s *Server) statsLoop(ctx context.Context) {
+	defer s.done.Done()
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	var lastEvents, lastPrune time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			s.FlushStats(false)
+			return
+		case now := <-t.C:
+			sample := now.Sub(lastEvents) >= 15*time.Minute
+			s.FlushStats(sample)
+			if sample {
+				lastEvents = now
+			}
+			if now.Sub(lastPrune) >= 24*time.Hour {
+				// el histórico horario se conserva un año
+				s.stats.Prune(stats.Hour(now.Add(-365 * 24 * time.Hour)))
+				lastPrune = now
+			}
+		}
+	}
+}
+
+// FlushStats guarda ahora lo contado desde la última vez y las medidas actuales (conexiones, tamaño de
+// la base de datos y, si sampleEvents, el número de eventos). Lo usan el bucle de fondo y las pruebas.
+func (s *Server) FlushStats(sampleEvents bool) {
+	if err := s.stats.Add(s.act.TakeDeltas()); err != nil {
+		fmt.Fprintf(LogOutput, "stats error=%q\n", err.Error())
+	}
+	gauges := map[string]int64{stats.MaxConns: s.conns.Load(), stats.MaxDBBytes: s.dbBytes()}
+	if sampleEvents {
+		if n, err := s.stats.EventCount(); err == nil {
+			gauges[stats.MaxEvents] = n
+		}
+	}
+	if err := s.stats.SetMax(stats.Hour(time.Now()), gauges); err != nil {
+		fmt.Fprintf(LogOutput, "stats error=%q\n", err.Error())
+	}
+}
+
+func (s *Server) dbBytes() int64 {
+	var total int64
+	for _, suffix := range []string{"", "-wal"} {
+		if fi, err := os.Stat(s.cfg.DBPath + suffix); err == nil {
+			total += fi.Size()
+		}
+	}
+	return total
 }

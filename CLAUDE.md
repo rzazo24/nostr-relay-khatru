@@ -113,6 +113,15 @@ CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or 
 Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
 
+**Long-term stats** (`internal/stats`): table `activity_hourly(hour, metric, n)` in the same sqlite file (own connection, WAL).
+`activityLog` accumulates per-hour *deltas* (`bumpLocked`/`TakeDeltas`) and `Server.statsLoop` flushes them every minute with an
+**additive** upsert (`n = n + excluded.n`) — never write absolute in-memory totals, a restart mid-hour would overwrite the hour —
+plus gauges with `MAX` upsert (`max:conns`, `max:db_bytes`, every minute; `max:events` = `SELECT COUNT(*)` only every 15 min).
+Final flush on `Close` (waits on `done`). Pruned after 365 days, daily. `Stats.History(range)` zero-fills and groups: `24h`/`7d`
+hourly, `30d`/`90d` daily UTC; served by `GET /admin/api/history?range=` (session required, 400 on unknown range). **Counters
+only — a test asserts no content/keys/IPs appear.** Frontend: tabs in the activity panel; don't name a top-level JS variable
+`history` (it's `window.history`). `Server.FlushStats(bool)` exists so tests needn't wait a minute.
+
 **Retention** (`internal/retention`): `RELAY_RETENTION_DAYS` (0 = off) → hourly pass (first one 1 min after start) that deletes
 *regular* kinds (`nostr.IsRegularKind`: <10000 except 0 and 3) older than N days, never the owner's events, never
 replaceable/addressable ones (current account state), max 20 000 per pass, paging by `Until` from the oldest seen. It uses the raw

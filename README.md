@@ -142,6 +142,10 @@ An invalid value stops the relay at startup with an error naming the variable.
 - **Privacy**: it never shows IP addresses, and it never shows the content of private messages (kinds 4, 13, 14, 1059). Rejections show only the first 8 characters of the pubkey. Activity history is kept in memory only (lost on restart).
 - **Safety**: the page has a strict Content-Security-Policy (no inline script or style) and puts everything it receives into the page as text, never as HTML.
 
+## Long-term statistics
+
+The activity chart has **60 min / 24 h / 7 d / 30 d / 90 d** tabs. The 60-minute view is live and in memory; the longer ones are persisted in the relay's SQLite file as **hourly counters** (`activity_hourly`: events saved, ephemeral, rejected — in total and by reason — and authentications, plus the maximum of open connections, database size and stored events seen each hour), flushed every minute, **added** (so a restart in the middle of an hour doesn't overwrite anything) and kept for a year. Under the chart there is a summary of the period with the growth of the database and of the stored events — handy to forecast disk use. Only counters are stored: never content, keys or IP addresses. History starts the day the feature was deployed.
+
 ## Landing page
 
 Opening the relay's URL in a browser shows a small presentation page (`static/index.html`, `landing.css`, `landing.js`; no external dependencies): the relay's name, icon and description, its `wss://` address with a copy button, the supported NIPs, the limits and the rules, in English and Spanish. It fills itself in from the relay's own NIP-11 document, so it is always up to date. Caddy serves it only to plain `GET`s of `/` — Nostr clients (`Accept: application/nostr+json`), WebSockets and NIP-86 `POST`s still reach the relay untouched.

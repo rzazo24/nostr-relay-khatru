@@ -1045,3 +1045,78 @@ func TestAdminPanel_ShowsGrowthPerDayAndRetention(t *testing.T) {
 		t.Fatalf("la retención debe verse en la configuración: %v", body["config"])
 	}
 }
+
+// ---------- histórico persistente ----------
+
+func TestHistory_PersistsActivityAndSurvivesARestart(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	dir := t.TempDir()
+	env := map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_DB_PATH": filepath.Join(dir, "r.sqlite"), "RELAY_MAX_CONTENT_LENGTH": "20"}
+
+	srv, ts := start(t, env)
+	r := connect(t, ts)
+	publish(r, someone.event(1, "uno", nil))
+	publish(r, someone.event(1, "dos", nil))
+	publish(r, someone.event(1, strings.Repeat("x", 50), nil)) // rechazada: demasiado larga
+	time.Sleep(150 * time.Millisecond)
+	srv.FlushStats(true)
+
+	cookie := adminLogin(t, ts, owner)
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/history", "", ""); res.StatusCode != 401 {
+		t.Fatal("el histórico exige sesión")
+	}
+	if res, body := adminCall(t, ts, "GET", "/admin/api/history?range=1y", "", cookie); res.StatusCode != 400 {
+		t.Fatalf("un rango desconocido se rechaza: %d %v", res.StatusCode, body)
+	}
+	_, body := adminCall(t, ts, "GET", "/admin/api/history?range=24h", "", cookie)
+	buckets := body["buckets"].([]any)
+	if len(buckets) != 24 || body["step"] != float64(3600) {
+		t.Fatalf("24 tramos de una hora: %d %v", len(buckets), body["step"])
+	}
+	totals := body["totals"].(map[string]any)
+	if totals["saved"] != float64(2) || totals["rejected"] != float64(1) {
+		t.Fatalf("totales guardados/rechazados: %v", totals)
+	}
+	if body["reasons"].(map[string]any)["invalid"] != float64(1) {
+		t.Fatalf("motivos: %v", body["reasons"])
+	}
+	if body["dbEnd"].(float64) <= 0 || body["eventsEnd"] != float64(2) {
+		t.Fatalf("tamaño de la base de datos y eventos: %v %v", body["dbEnd"], body["eventsEnd"])
+	}
+
+	// "reinicio": se cierra y se abre otro relé sobre la misma base de datos; lo anterior sigue y se suma
+	ts.Close()
+	srv.Close()
+	srv2, ts2 := start(t, env)
+	r2 := connect(t, ts2)
+	publish(r2, someone.event(1, "tres", nil))
+	time.Sleep(150 * time.Millisecond)
+	srv2.FlushStats(false)
+	cookie2 := adminLogin(t, ts2, owner)
+	_, body2 := adminCall(t, ts2, "GET", "/admin/api/history?range=7d", "", cookie2)
+	if body2["totals"].(map[string]any)["saved"] != float64(3) || len(body2["buckets"].([]any)) != 168 {
+		t.Fatalf("tras reiniciar deben sumarse 2+1 guardados en 168 tramos: %v", body2["totals"])
+	}
+	_, body3 := adminCall(t, ts2, "GET", "/admin/api/history?range=30d", "", cookie2)
+	if len(body3["buckets"].([]any)) != 30 || body3["step"] != float64(86400) || body3["totals"].(map[string]any)["saved"] != float64(3) {
+		t.Fatalf("30 días agrupados por día: %v", body3["totals"])
+	}
+}
+
+func TestHistory_HoldsNoContentOrKeys(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	srv, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_MAX_CONTENT_LENGTH": "5"})
+	r := connect(t, ts)
+	publish(r, someone.event(1, "contenido secreto largo", nil))
+	time.Sleep(100 * time.Millisecond)
+	srv.FlushStats(true)
+	cookie := adminLogin(t, ts, owner)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/api/history?range=24h", nil)
+	req.AddCookie(&http.Cookie{Name: "hs_admin", Value: cookie})
+	res, _ := http.DefaultClient.Do(req)
+	raw, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(raw), "secreto") || strings.Contains(string(raw), someone.pk[:8]) || strings.Contains(string(raw), "127.0.0.1") {
+		t.Fatalf("el histórico solo debe llevar contadores: %s", raw)
+	}
+}

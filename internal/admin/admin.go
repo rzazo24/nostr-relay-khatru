@@ -21,6 +21,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
+	"github.com/rzazo24/nostr-relay-khatru/internal/stats"
 )
 
 const (
@@ -79,6 +80,7 @@ type Options struct {
 	StartedAt    time.Time
 	Activity     Activity
 	Moderation   Moderation
+	Stats        *stats.Store      // histórico persistente (más de una hora)
 	Store        *moderation.Store // para las acciones de moderación del panel
 	Effects      Effects
 	Info         func() InfoView             // nombre, descripción e icono que anuncia NIP-11 ahora mismo
@@ -133,6 +135,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/api/logout", p.logout)
 	mux.HandleFunc("GET /admin/api/session", p.requireSession(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]any{"ok": true}) }))
 	mux.HandleFunc("GET /admin/api/stats", p.requireSession(p.stats))
+	mux.HandleFunc("GET /admin/api/history", p.requireSession(p.history))
 	p.mountModeration(mux)
 }
 
@@ -519,4 +522,22 @@ func (p *Panel) stats(w http.ResponseWriter, r *http.Request) {
 		},
 		"config": p.o.Config,
 	})
+}
+
+// history devuelve la actividad de un periodo largo (24h, 7d, 30d o 90d) a partir de lo persistido.
+func (p *Panel) history(w http.ResponseWriter, r *http.Request) {
+	if p.o.Stats == nil {
+		fail(w, http.StatusServiceUnavailable, "the history is not available")
+		return
+	}
+	name := r.URL.Query().Get("range")
+	if name == "" {
+		name = "24h"
+	}
+	res, err := p.o.Stats.History(name, p.o.Now())
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

@@ -89,3 +89,9 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .help-body p, .help-body li, .help-body dd { color:var(--text); }
 .help-body dl { margin:8px 0; } .help-body dt { font-weight:700; margin-top:10px; } .help-body dd { margin:2px 0 0; color:var(--muted); }
 .help-body ul { padding-left:20px; } .help-body section { scroll-margin-top:60px; }
+
+.tabs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+.tabs button { padding:3px 12px; font-size:.85rem; color:var(--muted); }
+.tabs button[aria-pressed="true"] { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; }
+.axis { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; margin-top:2px; }
+.summary { margin-top:10px; }

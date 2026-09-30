@@ -97,6 +97,7 @@ async function load() {
   if (!res.ok) throw new Error(`error ${res.status}`)
   render(await res.json())
   await loadModeration(false)
+  await loadHistory()
   lastOk = Date.now()
   $('updated').textContent = `Actualizado a las ${clock(Math.floor(lastOk / 1000))}`
 }
@@ -122,7 +123,8 @@ function render(d) {
   ]
   $('cards').replaceChildren(...cards.map(([l, v]) => el('div', { class: 'card' }, el('div', { class: 'v', text: v }), el('div', { class: 'l', text: l }))))
 
-  renderChart(d.activity.minutes)
+  liveMinutes = d.activity.minutes
+  renderActivity()
 
   const maxDay = Math.max(1, ...d.events.perDay.map((x) => x.count))
   $('growth').replaceChildren(...(d.events.perDay.length ? d.events.perDay.map((x) => el('div', { class: 'row' }, el('span', { text: x.day }), el('div', { class: 'bar' }, el('i', { width: `${Math.round((x.count / maxDay) * 100)}%` })), el('span', { text: fmt(x.count) }))) : [el('span', { class: 'muted', text: 'Sin eventos en los últimos 14 días.' })]))
@@ -176,7 +178,56 @@ function fillKv(dl, rows) {
   dl.replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: String(v) })]))
 }
 
-function renderChart(minutes) {
+let liveMinutes = []
+let range = '60m'
+let longHistory = null // último histórico pedido (para el periodo elegido)
+
+const dayFmt = (unix) => { const d = new Date(unix * 1000); return `${two(d.getDate())}/${two(d.getMonth() + 1)}` }
+const hourFmt = (unix) => { const d = new Date(unix * 1000); return `${two(d.getDate())}/${two(d.getMonth() + 1)} ${two(d.getHours())}:00` }
+
+// Pinta la gráfica y el resumen del periodo elegido.
+function renderActivity() {
+  $('range-label').textContent = { '60m': '· últimos 60 minutos', '24h': '· últimas 24 horas', '7d': '· últimos 7 días', '30d': '· últimos 30 días', '90d': '· últimos 90 días' }[range]
+  document.querySelectorAll('.tabs [data-range]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.range === range)))
+  if (range === '60m') {
+    renderChart(liveMinutes, (m) => clock(m.t).slice(0, 5))
+    $('axis-start').textContent = liveMinutes.length ? clock(liveMinutes[0].t).slice(0, 5) : ''
+    $('axis-end').textContent = 'ahora'
+    const sum = (k) => liveMinutes.reduce((a, m) => a + m[k], 0)
+    fillKv($('hist-summary'), [['Guardados', fmt(sum('saved'))], ['Efímeros', fmt(sum('ephemeral'))], ['Rechazados', fmt(sum('rejected'))], ['Autenticaciones', fmt(sum('authenticated'))]])
+    return
+  }
+  if (!longHistory || longHistory.range !== range) { $('chart').replaceChildren(el('span', { class: 'muted', text: 'Cargando…' })); $('hist-summary').replaceChildren(); return }
+  const label = longHistory.step === 3600 ? hourFmt : dayFmt
+  renderChart(longHistory.buckets, (b) => label(b.t))
+  $('axis-start').textContent = label(longHistory.buckets[0].t)
+  $('axis-end').textContent = 'ahora'
+  const t = longHistory.totals
+  const rows = [['Guardados', fmt(t.saved)], ['Efímeros', fmt(t.ephemeral)], ['Rechazados', fmt(t.rejected)], ['Autenticaciones', fmt(t.authenticated)], ['Conexiones máx. a la vez', t.maxConns ? fmt(t.maxConns) : '—']]
+  const reasons = Object.entries(longHistory.reasons).sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}: ${fmt(n)}`).join(' · ')
+  if (reasons) rows.push(['Rechazos por motivo', reasons])
+  if (longHistory.dbStart && longHistory.dbEnd) {
+    const diff = longHistory.dbEnd - longHistory.dbStart
+    rows.push(['Base de datos', `${bytes(longHistory.dbStart)} → ${bytes(longHistory.dbEnd)} (${diff >= 0 ? '+' : '−'}${bytes(Math.abs(diff))})`])
+  }
+  if (longHistory.eventsStart && longHistory.eventsEnd) {
+    const diff = longHistory.eventsEnd - longHistory.eventsStart
+    rows.push(['Eventos guardados', `${fmt(longHistory.eventsStart)} → ${fmt(longHistory.eventsEnd)} (${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))})`])
+  }
+  fillKv($('hist-summary'), rows)
+}
+
+async function loadHistory() {
+  if (range === '60m') return
+  const wanted = range
+  const res = await fetch(`/admin/api/history?range=${wanted}`, { credentials: 'same-origin', cache: 'no-store' })
+  if (res.status === 401) { stop(); show('login'); return }
+  if (!res.ok) throw new Error(`error ${res.status}`)
+  longHistory = await res.json()
+  if (range === wanted) renderActivity()
+}
+
+function renderChart(minutes, labelOf) {
   const NS = 'http://www.w3.org/2000/svg'
   const W = 600, H = 140, pad = 2
   const max = Math.max(3, ...minutes.map((m) => m.saved + m.ephemeral + m.rejected))
@@ -193,7 +244,7 @@ function renderChart(minutes) {
       const r = document.createElementNS(NS, 'rect')
       r.setAttribute('x', String(i * bw + 0.5)); r.setAttribute('y', String(y)); r.setAttribute('width', String(Math.max(1, bw - 1))); r.setAttribute('height', String(h)); r.setAttribute('fill', color)
       const t = document.createElementNS(NS, 'title')
-      t.textContent = `${clock(m.t).slice(0, 5)} · guardados ${m.saved}, efímeros ${m.ephemeral}, rechazados ${m.rejected}, autenticaciones ${m.authenticated}`
+      t.textContent = `${labelOf(m)} · guardados ${m.saved}, efímeros ${m.ephemeral}, rechazados ${m.rejected}, autenticaciones ${m.authenticated}`
       r.append(t)
       svg.append(r)
     }
@@ -319,6 +370,12 @@ $('info-reset').addEventListener('click', async () => {
   if (!confirm('¿Restaurar nombre, descripción e icono a los de la configuración?')) return
   await act('info', { reset: ['name', 'description', 'icon'] }, 'Restaurados los de la configuración', { forceInfo: true })
 })
+
+document.querySelectorAll('.tabs [data-range]').forEach((b) => b.addEventListener('click', () => {
+  range = b.dataset.range
+  renderActivity()
+  loadHistory().catch((e) => { $('updated').textContent = `Error al cargar el histórico: ${e.message}` })
+}))
 
 // ---------- ayuda ----------
 

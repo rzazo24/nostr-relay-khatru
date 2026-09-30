@@ -140,6 +140,10 @@ Un valor inválido detiene el relé al arrancar con un error que nombra la varia
 - **Privacidad**: nunca muestra direcciones IP ni el contenido de los mensajes privados (kinds 4, 13, 14, 1059). Los rechazos solo llevan los 8 primeros caracteres del pubkey. El histórico de actividad está solo en memoria (se pierde al reiniciar).
 - **Seguridad**: la página tiene una política de contenido estricta (sin script ni estilo en línea) y pone todo lo que recibe como texto, nunca como HTML.
 
+## Estadísticas de largo plazo
+
+La gráfica de actividad tiene pestañas de **60 min / 24 h / 7 d / 30 d / 90 d**. La de 60 minutos es en directo y está en memoria; las largas se guardan en el propio archivo SQLite del relé como **contadores por hora** (`activity_hourly`: eventos guardados, efímeros y rechazados —en total y por motivo— y autenticaciones, más el máximo de conexiones abiertas, tamaño de la base de datos y eventos guardados vistos cada hora), se vuelcan cada minuto, **se suman** (un reinicio a mitad de hora no pisa nada) y se conservan un año. Bajo la gráfica hay un resumen del periodo con cuánto han crecido la base de datos y los eventos guardados, útil para prever el disco. Solo se guardan contadores: nunca contenido, claves ni IPs. El histórico empieza el día en que se activó la función.
+
 ## Página de presentación
 
 Al abrir la URL del relé en un navegador se ve una pequeña página de presentación (`static/index.html`, `landing.css`, `landing.js`; sin dependencias externas): nombre, icono y descripción del relé, su dirección `wss://` con un botón de copiar, los NIPs soportados, los límites y las reglas, en español e inglés. Se rellena sola con el documento NIP-11 del propio relé, así que siempre está al día. Caddy solo la sirve a los `GET` normales de `/`: los clientes de Nostr (`Accept: application/nostr+json`), los WebSockets y los `POST` de NIP-86 siguen llegando al relé sin tocar.

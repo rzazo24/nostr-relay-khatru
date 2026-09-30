@@ -39,6 +39,7 @@ type activityLog struct {
 	// Para el panel de control: histórico por minuto (últimas 2 h), rechazos recientes y
 	// totales por motivo desde que arrancó el relé. Solo en memoria, sin contenido ni IPs.
 	minutes      map[int64]*admin.Minute
+	deltas       map[int64]map[string]int // contadores por hora pendientes de guardar en la base de datos
 	recent       []admin.Rejection
 	reasonTotals map[string]int
 }
@@ -50,7 +51,25 @@ const (
 
 func newActivityLog(out io.Writer, now func() time.Time) *activityLog {
 	return &activityLog{out: out, now: now, windowFrom: now(), rejected: map[string]int{}, printed: map[string]int{},
-		minutes: map[int64]*admin.Minute{}, reasonTotals: map[string]int{}}
+		minutes: map[int64]*admin.Minute{}, reasonTotals: map[string]int{}, deltas: map[int64]map[string]int{}}
+}
+
+// bumpLocked suma 1 a un contador de la hora actual, pendiente de guardarse (ver TakeDeltas).
+func (a *activityLog) bumpLocked(metric string) {
+	h := a.now().Unix() / 3600 * 3600
+	if a.deltas[h] == nil {
+		a.deltas[h] = map[string]int{}
+	}
+	a.deltas[h][metric]++
+}
+
+// TakeDeltas devuelve (y vacía) lo contado desde la última vez, por hora, para guardarlo de forma acumulativa.
+func (a *activityLog) TakeDeltas() map[int64]map[string]int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.deltas
+	a.deltas = map[int64]map[string]int{}
+	return out
 }
 
 // bucketLocked devuelve el contador del minuto actual (y descarta los muy antiguos).
@@ -93,6 +112,8 @@ func (a *activityLog) Rejected(what string, kind int, pubkey, reason string) {
 	key := reasonKey(reason)
 	a.rejected[key]++
 	a.reasonTotals[key]++
+	a.bumpLocked("rejected")
+	a.bumpLocked("rej:" + key)
 	a.bucketLocked().Rejected++
 	a.recent = append(a.recent, admin.Rejection{T: a.now().Unix(), What: what, Kind: kind, Pubkey: shortKey(pubkey), Reason: reason})
 	if len(a.recent) > recentKept {
@@ -111,6 +132,7 @@ func (a *activityLog) Saved() {
 	a.rollLocked()
 	a.saved++
 	a.bucketLocked().Saved++
+	a.bumpLocked("saved")
 }
 
 func (a *activityLog) Ephemeral() {
@@ -119,6 +141,7 @@ func (a *activityLog) Ephemeral() {
 	a.rollLocked()
 	a.ephemeral++
 	a.bucketLocked().Ephemeral++
+	a.bumpLocked("ephemeral")
 }
 
 func (a *activityLog) Authenticated() {
@@ -127,6 +150,7 @@ func (a *activityLog) Authenticated() {
 	a.rollLocked()
 	a.authed++
 	a.bucketLocked().Authenticated++
+	a.bumpLocked("authenticated")
 }
 
 // rollLocked cierra la ventana de un minuto imprimiendo el resumen si hubo actividad.

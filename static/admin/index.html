@@ -37,8 +37,17 @@
       <p class="muted small cards-help"><button type="button" class="linkish" data-help="h-cards">¿Qué significa cada número?</button></p>
 
       <section class="panel">
-        <h2>Actividad · últimos 60 minutos <button type="button" class="q" data-help="h-activity" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
-        <div id="chart" class="chart" role="img" aria-label="Actividad por minuto"></div>
+        <h2>Actividad <span id="range-label" class="muted small"></span> <button type="button" class="q" data-help="h-activity" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <div class="tabs" role="group" aria-label="Periodo">
+          <button type="button" data-range="60m" aria-pressed="true">60 min</button>
+          <button type="button" data-range="24h" aria-pressed="false">24 h</button>
+          <button type="button" data-range="7d" aria-pressed="false">7 días</button>
+          <button type="button" data-range="30d" aria-pressed="false">30 días</button>
+          <button type="button" data-range="90d" aria-pressed="false">90 días</button>
+        </div>
+        <div id="chart" class="chart" role="img" aria-label="Actividad del periodo elegido"></div>
+        <div class="axis"><span id="axis-start"></span><span id="axis-end"></span></div>
+        <dl id="hist-summary" class="kv summary"></dl>
         <p class="legend">
           <span><i class="sw saved"></i> guardados</span>
           <span><i class="sw ephemeral"></i> efímeros</span>
@@ -175,7 +184,10 @@
 
       <section id="h-activity">
         <h3>Actividad · últimos 60 minutos</h3>
-        <p>Una barra por minuto. Colores: <b>turquesa</b> = eventos guardados, <b>azul</b> = eventos efímeros, <b>rojo</b> = rechazados. Pasa el ratón por encima de una barra para ver las cifras exactas de ese minuto (incluye también las autenticaciones).</p>
+        <p>Elige el periodo con los botones: <b>60 min</b> (una barra por minuto, en directo), <b>24 h</b> y <b>7 días</b> (una barra por hora) o <b>30</b> y <b>90 días</b> (una barra por día). Las horas y los días son en <b>tu hora local</b> al mostrarlos.</p>
+        <p>Debajo de la gráfica hay un resumen del periodo: totales de eventos guardados, efímeros, rechazados y autenticaciones; los rechazos por motivo; el máximo de conexiones a la vez; y cómo han cambiado el tamaño de la base de datos y el número de eventos guardados (útil para prever el disco).</p>
+        <p><b>Dónde se guarda:</b> los periodos de más de una hora se guardan en la base de datos del relé, solo como <b>contadores por hora</b> (nada de contenido, claves ni IPs), y se conservan un año. Sobreviven a reinicios y a las actualizaciones. <b>Empiezan desde el día que se activó esta función</b>: lo anterior aparece a cero. La vista de 60 minutos sigue siendo en memoria.</p>
+        <p>Una barra por minuto (vista de 60 min). Colores: <b>turquesa</b> = eventos guardados, <b>azul</b> = eventos efímeros, <b>rojo</b> = rechazados. Pasa el ratón por encima de una barra para ver las cifras exactas de ese minuto (incluye también las autenticaciones).</p>
         <p><b>Evento efímero</b>: un mensaje que el relé reenvía a quien esté escuchando pero no guarda. Sirve para cosas momentáneas (por ejemplo chats en vivo). No ocupa disco.</p>
         <p>El histórico vive solo en memoria: si el relé se reinicia, la gráfica empieza de cero.</p>
       </section>

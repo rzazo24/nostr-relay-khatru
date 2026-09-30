@@ -13,6 +13,8 @@
 	@static path /icon.png /icon.svg /landing.css /landing.js
 	handle @static {
 		root * /srv/static
+		# no-cache = el navegador pregunta siempre si cambió (ETag) y no se queda con un CSS/JS viejo
+		header Cache-Control "no-cache"
 		file_server
 	}
 

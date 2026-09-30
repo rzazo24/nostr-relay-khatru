@@ -146,7 +146,8 @@ are NOT NIP-11 (`Accept: application/nostr+json`), NOT WebSocket (`Upgrade`/`Con
 get a 200 page (an early version required text/html, so a monitor sending `*/*` would have reached the relay's 404).
 `+Vary Accept` is set since one URL returns different things. The page has a strict CSP (`script-src 'self'`, no inline) and
 inserts everything from NIP-11 with `textContent` — keep that: the name/description can be changed live via NIP-86. The npub
-shown in the footer is bech32-encoded in `landing.js` (verified against nostr-tools). Static files are a *directory* bind mount
+shown in the footer is bech32-encoded in `landing.js` (verified against nostr-tools). All static assets (`/landing.css`, `/landing.js`, icons, admin) are sent with `Cache-Control: no-cache` — without it browsers kept an
+older CSS for hours (heuristic caching from `Last-Modified`) and a styling fix looked like it hadn't worked. Static files are a *directory* bind mount
 (edits go live at once); the Caddyfile is a *file* mount, so after editing it run `docker compose up -d --force-recreate caddy`.
 
 `static/` holds the relay icon (`icon.svg` is the source, `icon.png` 512×512 is what is advertised —

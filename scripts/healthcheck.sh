@@ -11,6 +11,11 @@
 #   RELAY_URL         (obligatoria) URL pública https del relé
 #   FAIL_THRESHOLD    fallos seguidos antes de reiniciar (default: 2)
 #   COOLDOWN_SECONDS  espera mínima entre reinicios (default: 600)
+#   PING_URL          (opcional) URL a la que se avisa cuando el relé responde bien: un servicio de
+#                     monitorización tipo healthchecks.io la espera cada pocos minutos y te avisa si
+#                     DEJA de llegar (servidor caído, relé caído, cron parado...).
+#   PING_FAIL_URL     (opcional) URL a la que se avisa al detectar un fallo, para que te avise antes
+#                     de que venza el plazo (en healthchecks.io es la URL de ping + /fail).
 #   STATE_DIR, LOG_FILE, COMPOSE_DIR, RESTART_CMD (default: "docker compose restart")
 
 set -uo pipefail
@@ -22,6 +27,8 @@ STATE_DIR="${STATE_DIR:-$HOME/.local/state/nostr-relay-khatru-health}"
 LOG_FILE="${LOG_FILE:-$HOME/backups/nostr-relay-khatru/healthcheck.log}"
 COMPOSE_DIR="${COMPOSE_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 RESTART_CMD="${RESTART_CMD:-docker compose restart}"
+PING_URL="${PING_URL:-}"
+PING_FAIL_URL="${PING_FAIL_URL:-}"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
 
@@ -35,17 +42,25 @@ if [ -f "$LOG_FILE" ] && [ "$(stat -c %s "$LOG_FILE")" -gt 1048576 ]; then
 fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG_FILE"; }
 
+# Avisos a un monitor externo. Un fallo al avisar no debe romper el chequeo: solo se apunta en el log.
+ping() {
+  [ -n "$1" ] || return 0
+  curl -fsS -m 10 --retry 2 -o /dev/null "$1" 2>/dev/null || log "no se pudo avisar al monitor externo"
+}
+
 fails="$(cat "$STATE_DIR/fails" 2>/dev/null || echo 0)"
 
 if curl -fsS -o /dev/null --max-time 10 -H 'Accept: application/nostr+json' "$RELAY_URL" 2>/dev/null; then
   [ "$fails" -gt 0 ] && log "recuperado tras $fails fallo(s)"
   echo 0 > "$STATE_DIR/fails"
+  ping "$PING_URL"
   exit 0
 fi
 
 fails=$((fails + 1))
 echo "$fails" > "$STATE_DIR/fails"
 log "el relé NO responde ($fails/$FAIL_THRESHOLD)"
+ping "$PING_FAIL_URL"
 [ "$fails" -ge "$FAIL_THRESHOLD" ] || exit 0
 
 now="$(date +%s)"

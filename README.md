@@ -148,6 +148,7 @@ Clients show the NIP-11 `icon`. Put a square image (PNG/JPG/WebP, ~512×512, sma
   days. Schedule it with cron yourself, e.g. `17 3 * * * /path/to/scripts/backup-db.sh`.
 - **Self-heal (optional)**: `./scripts/healthcheck.sh` restarts the containers after
   repeated failures. It is never installed automatically; read its header first.
+- **External alerts (optional)**: the script can also ping a monitoring service — set `PING_URL` (called each time the relay answers; a service like healthchecks.io emails you when the pings *stop*, which also covers the whole server going down) and, optionally, `PING_FAIL_URL` (called on a failure, to alert sooner). An unreachable monitor never breaks the check. Or point an outside HTTP monitor (UptimeRobot…) at `https://<RELAY_DOMAIN>/`, which answers 200.
 - **Logs**: `docker compose logs -f relay`. The relay logs what it *rejects* (`reject event kind=1 pubkey=ab12cd34 reason="rate-limited: …"`, at most 5 lines per reason per minute) and, when there was activity, a one-line summary per minute (`stats … saved=12 rejected=3 [rate-limited=3]`). It never logs content or IPs, only the kind, the first 8 characters of the pubkey and the reason — handy to see why a client (say Damus) is being refused.
 
 ## Caveats worth knowing

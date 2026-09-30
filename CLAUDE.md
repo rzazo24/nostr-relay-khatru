@@ -129,7 +129,7 @@ via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, de
 `RELAY_PUBLIC_URL`, `RELAY_PUBKEY` = the owner's key for NIP-86). `docker compose up -d --force-recreate relay`
 after editing `.env` (env_file is read when the container is created). A daily cron runs
 `scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`); the
-healthcheck script runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
+healthcheck script (optionally pings an external monitor via `PING_URL`/`PING_FAIL_URL`, set in the cron line; not configured yet) runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
 `~/backups/nostr-relay-khatru/healthcheck.log`, only written on failures/recoveries).
 
 

@@ -69,3 +69,30 @@ jobs:
       - name: Show relay logs
         if: always()
         run: cat "$RUNNER_TEMP/relay.log" || true
+
+  panel-test:
+    name: Control panel end-to-end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build relay
+        run: CGO_ENABLED=1 go build -o nostr-relay-khatru .
+
+      - name: Install test dependencies and Chromium
+        working-directory: test/panel
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run panel tests
+        working-directory: test/panel
+        env:
+          RELAY_BIN: ../../nostr-relay-khatru
+        run: npm test

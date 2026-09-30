@@ -25,6 +25,9 @@ go test ./internal/policies/ -run TestLimits_FutureSkew -v
 RELAY_EVENTS_PER_MINUTE=1000 RELAY_EVENTS_BURST=1000 RELAY_REQS_PER_MINUTE=1000 RELAY_REQS_BURST=1000 CGO_ENABLED=1 go run . &
 cd test && npm install && RELAY_URL=ws://localhost:3334 npm test
 
+# control-panel end-to-end (Playwright + real relay binary; build it first with `go build -o nostr-relay-khatru .`)
+cd test/panel && npm install && npx playwright install chromium && RELAY_BIN=../../nostr-relay-khatru npm test
+
 docker compose up -d --build                 # relay + Caddy (needs RELAY_DOMAIN in .env)
 ./scripts/backup-db.sh                       # consistent sqlite .backup (not cp)
 ```
@@ -112,6 +115,13 @@ CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or 
 (`el.style.width`) and text via `textContent` (a page test injects `<img onerror>`/`<script>` in a note to prove it).
 Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
+
+**Panel tests** (`test/panel/`, CI job `panel-test`): `harness.mjs` starts the real binary plus a tiny server standing in for Caddy
+(serves `static/` and proxies `/admin/api/*`; it **reads the `/admin` CSP from the Caddyfile**, so the strict policy is really
+enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: stats are cached 10 s in the relay (use
+`refreshUntil`); a login signature is single-use, so the fake signer adds a random `nonce` tag (two logins in the same
+second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
+dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
 **Search** (`internal/admin/search.go`, `GET /admin/api/search?q=&kind=&next=`): `planSearch` decides what `q` is (npub/nprofile →
 author; note1/nevent1 → id; 64 hex → author OR id (and shows a key summary); 6–63 hex → prefix of pubkey OR id; ≤5 digits → kind;

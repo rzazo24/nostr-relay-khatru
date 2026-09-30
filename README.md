@@ -209,6 +209,9 @@ CGO_ENABLED=1 go build ./... && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go t
 # publishes 130 events, so start the relay with high rate limits:
 RELAY_EVENTS_PER_MINUTE=1000 RELAY_EVENTS_BURST=1000 RELAY_REQS_PER_MINUTE=1000 RELAY_REQS_BURST=1000 go run . &
 cd test && npm install && RELAY_URL=ws://localhost:3334 npm test
+
+# control panel tests: real relay binary + headless Chromium (Playwright), simulated nos2x
+cd test/panel && npm install && npx playwright install chromium && RELAY_BIN=../../nostr-relay-khatru npm test
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for how the code fits together.

@@ -15,13 +15,20 @@ body {
   color: var(--text);
   font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 56px; }
+.cols { display: grid; grid-template-columns: 1fr; gap: 0 48px; }
+@media (min-width: 900px) {
+  .cols { grid-template-columns: 1fr 1fr; align-items: start; }
+  .lead { max-width: 70ch; font-size: 1.15rem; }
+  h1 { font-size: 2rem; }
+  .icon { width: 88px; height: 88px; }
+}
 .hero { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .hero > div:nth-child(2) { flex: 1; min-width: 0; }
 .icon { border-radius: 16px; flex: none; }
 h1 { margin: 0; font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
 h2 { margin: 32px 0 8px; font-size: 1.05rem; color: var(--accent); letter-spacing: .02em; }
-.lead { color: var(--muted); font-size: 1.05rem; margin-top: 20px; overflow-wrap: anywhere; }
+.lead { color: var(--muted); font-size: 1.05rem; margin: 20px 0 0; overflow-wrap: anywhere; }
 .status { margin: 4px 0 0; color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: 8px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .status.ok .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(45, 212, 191, .18); }
@@ -48,9 +55,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 .chips a:hover { border-color: var(--accent); }
 .chips b { color: var(--accent); }
-.limits { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+.limits { display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; margin: 0; }
 .limits dt { color: var(--muted); }
-.limits dd { margin: 0; overflow-wrap: anywhere; }
+.limits dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .rules { padding-left: 20px; margin: 0; }
 .rules li { margin: 6px 0; }
 a { color: var(--accent); }
@@ -63,4 +70,5 @@ footer p { margin: 4px 0; overflow-wrap: anywhere; }
   .address { flex-direction: column; }
   .limits { grid-template-columns: 1fr; gap: 0; }
   .limits dt { margin-top: 8px; }
+  .limits dd { text-align: left; }
 }

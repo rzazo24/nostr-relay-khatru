@@ -194,3 +194,15 @@ func (a *activityLog) ReasonTotals() map[string]int {
 	}
 	return out
 }
+
+// Admin deja constancia de una acción de moderación hecha desde el panel de control: qué se hizo y,
+// como mucho, los 8 primeros caracteres del pubkey o del id afectado (nunca contenido ni IPs).
+func (a *activityLog) Admin(action, target string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if target == "" {
+		fmt.Fprintf(a.out, "admin action=%s\n", action)
+		return
+	}
+	fmt.Fprintf(a.out, "admin action=%s target=%s\n", action, target)
+}

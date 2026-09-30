@@ -22,6 +22,7 @@ import (
 	"github.com/fiatjaf/eventstore/slicestore"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip13"
+	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/nbd-wtf/go-nostr/nip77"
 
 	"github.com/rzazo24/nostr-relay-khatru/internal/config"
@@ -696,6 +697,10 @@ func TestAdminPanel_SessionsAndStats(t *testing.T) {
 		t.Fatalf("faltan eventos recientes: %v", events["recent"])
 	}
 	activity := body["activity"].(map[string]any)
+	mod := body["moderation"].(map[string]any)
+	if _, isArray := mod["allowedKinds"].([]any); !isArray {
+		t.Fatalf("una lista vacía debe ser [] y no null: %v", mod["allowedKinds"])
+	}
 	if len(activity["minutes"].([]any)) != 60 {
 		t.Fatal("el histórico son 60 minutos")
 	}
@@ -733,5 +738,238 @@ func TestAdminPanel_ReadOnlyAndNoInterferenceWithNostr(t *testing.T) {
 	}
 	if nip11Doc(t, ts)["name"] == nil {
 		t.Fatal("NIP-11 debe seguir funcionando junto a /admin")
+	}
+}
+
+// ---------- panel de control: moderación (fase 2) ----------
+
+// adminPost hace una acción del panel (POST JSON con la cookie de sesión).
+func adminPost(t *testing.T, ts *httptest.Server, cookie, path string, body map[string]any, headers map[string]string) (int, map[string]any) {
+	t.Helper()
+	j, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/api/mod/"+path, bytes.NewReader(j))
+	req.Header.Set("Content-Type", "application/json")
+	if cookie != "" {
+		req.AddCookie(&http.Cookie{Name: "hs_admin", Value: cookie})
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out map[string]any
+	json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+func TestAdminMod_RequiresSessionSameOriginAndJSON(t *testing.T) {
+	owner, spammer := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	cookie := adminLogin(t, ts, owner)
+	body := map[string]any{"pubkey": spammer.pk}
+
+	if code, _ := adminPost(t, ts, "", "ban-pubkey", body, nil); code != 401 {
+		t.Fatalf("sin sesión: %d", code)
+	}
+	if code, _ := adminPost(t, ts, "token-falso", "ban-pubkey", body, nil); code != 401 {
+		t.Fatalf("token falso: %d", code)
+	}
+	if code, _ := adminPost(t, ts, cookie, "ban-pubkey", body, map[string]string{"Origin": "https://evil.example"}); code != 403 {
+		t.Fatalf("otro origen debe rechazarse: %d", code)
+	}
+	if code, _ := adminPost(t, ts, cookie, "ban-pubkey", body, map[string]string{"Sec-Fetch-Site": "cross-site"}); code != 403 {
+		t.Fatalf("una petición entre sitios debe rechazarse: %d", code)
+	}
+	if code, _ := adminPost(t, ts, cookie, "ban-pubkey", body, map[string]string{"Content-Type": "text/plain"}); code != 415 {
+		t.Fatalf("solo JSON: %d", code)
+	}
+	// desde el propio origen sí
+	if code, out := adminPost(t, ts, cookie, "ban-pubkey", body, map[string]string{"Origin": ts.URL, "Sec-Fetch-Site": "same-origin"}); code != 200 || out["ok"] != true {
+		t.Fatalf("la petición legítima debe funcionar: %d %v", code, out)
+	}
+}
+
+func TestAdminMod_BanUnbanPubkeyAndDeleteTheirEvents(t *testing.T) {
+	owner, spammer := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+
+	for i := 0; i < 3; i++ {
+		publish(r, spammer.event(1, fmt.Sprintf("spam %d", i), nil))
+	}
+	publish(r, owner.event(1, "nota del dueño", nil))
+
+	// el dueño no se puede banear a sí mismo
+	if code, out := adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": owner.pk}, nil); code != 400 || !strings.Contains(fmt.Sprint(out["error"]), "owner") {
+		t.Fatalf("no se puede banear al dueño: %d %v", code, out)
+	}
+	// datos inválidos
+	if code, _ := adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": "no-es-una-clave"}, nil); code != 400 {
+		t.Fatal("una clave inválida debe rechazarse")
+	}
+	if code, _ := adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": spammer.pk, "reason": strings.Repeat("x", 500)}, nil); code != 400 {
+		t.Fatal("un motivo demasiado largo debe rechazarse")
+	}
+
+	// se banea aceptando un npub y borrando sus eventos guardados
+	npub, _ := nip19.EncodePublicKey(spammer.pk)
+	code, out := adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": npub, "reason": "spam", "deleteEvents": true}, nil)
+	if code != 200 || out["deleted"] != float64(3) {
+		t.Fatalf("debería banear y borrar 3 eventos: %d %v", code, out)
+	}
+	if got, _ := fetch(t, r, nostr.Filter{Authors: []string{spammer.pk}}); len(got) != 0 {
+		t.Fatalf("sus eventos deberían haberse borrado: %d", len(got))
+	}
+	if got, _ := fetch(t, r, nostr.Filter{Authors: []string{owner.pk}}); len(got) != 1 {
+		t.Fatal("los del dueño no se tocan")
+	}
+	if err := publish(r, spammer.event(1, "otra vez", nil)); err == nil || !strings.Contains(err.Error(), "banned") {
+		t.Fatalf("baneado no puede publicar: %v", err)
+	}
+
+	// aparece en la lista con su motivo y se puede quitar sin activar la lista blanca
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	if _, isArray := lists["disallowedKinds"].([]any); !isArray {
+		t.Fatalf("disallowedKinds vacío debe ser []: %v", lists["disallowedKinds"])
+	}
+	banned := lists["bannedPubkeys"].([]any)
+	if len(banned) != 1 || banned[0].(map[string]any)["reason"] != "spam" || banned[0].(map[string]any)["key"] != spammer.pk {
+		t.Fatalf("lista de baneados: %v", banned)
+	}
+	adminPost(t, ts, cookie, "unban-pubkey", map[string]any{"pubkey": spammer.pk}, nil)
+	if err := publish(r, spammer.event(1, "perdonado", nil)); err != nil {
+		t.Fatalf("tras quitar el baneo puede publicar (y el relé sigue abierto): %v", err)
+	}
+	if nip11Doc(t, ts)["limitation"].(map[string]any)["restricted_writes"] != false {
+		t.Fatal("quitar un baneo no debe activar la lista blanca")
+	}
+}
+
+func TestAdminMod_AllowlistNeverLocksTheOwnerOut(t *testing.T) {
+	owner, friend, stranger := newKeys(), newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+
+	adminPost(t, ts, cookie, "allow-pubkey", map[string]any{"pubkey": friend.pk, "reason": "amigo"}, nil)
+	if err := publish(r, stranger.event(1, "extraño", nil)); err == nil || !strings.Contains(err.Error(), "restricted") {
+		t.Fatalf("con lista blanca, un extraño no publica: %v", err)
+	}
+	if err := publish(r, friend.event(1, "amigo", nil)); err != nil {
+		t.Fatalf("el permitido sí: %v", err)
+	}
+	if err := publish(r, owner.event(1, "dueño", nil)); err != nil {
+		t.Fatalf("el dueño nunca queda fuera de su propio relé: %v", err)
+	}
+	adminPost(t, ts, cookie, "unallow-pubkey", map[string]any{"pubkey": friend.pk}, nil)
+	if err := publish(r, stranger.event(1, "ya abierto", nil)); err != nil {
+		t.Fatalf("sin lista blanca vuelve a ser abierto: %v", err)
+	}
+}
+
+func TestAdminMod_EventsKindsAndIPs(t *testing.T) {
+	owner, author := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+
+	bad := author.event(1, "vetar", nil)
+	publish(r, bad)
+	note, _ := nip19.EncodeNote(bad.ID)
+	code, out := adminPost(t, ts, cookie, "ban-event", map[string]any{"id": note, "reason": "ilegal"}, nil)
+	if code != 200 || out["deleted"] != true {
+		t.Fatalf("vetar un evento guardado lo borra: %d %v", code, out)
+	}
+	if err := publish(r, bad); err == nil || !strings.Contains(err.Error(), "banned") {
+		t.Fatalf("y no puede volver: %v", err)
+	}
+	adminPost(t, ts, cookie, "unban-event", map[string]any{"id": bad.ID}, nil)
+	if err := publish(r, bad); err != nil {
+		t.Fatalf("tras quitar el veto vuelve a aceptarse: %v", err)
+	}
+
+	adminPost(t, ts, cookie, "kind", map[string]any{"kind": 7, "rule": "disallow"}, nil)
+	if err := publish(r, author.event(7, "+", nil)); err == nil || !strings.Contains(err.Error(), "kind 7") {
+		t.Fatalf("kind prohibido: %v", err)
+	}
+	adminPost(t, ts, cookie, "kind", map[string]any{"kind": 7, "rule": "clear"}, nil)
+	if err := publish(r, author.event(7, "+", nil)); err != nil {
+		t.Fatalf("regla quitada: %v", err)
+	}
+	if code, _ := adminPost(t, ts, cookie, "kind", map[string]any{"kind": 99999, "rule": "allow"}, nil); code != 400 {
+		t.Fatal("un kind fuera de rango se rechaza")
+	}
+	if code, _ := adminPost(t, ts, cookie, "kind", map[string]any{"kind": 7, "rule": "borrar"}, nil); code != 400 {
+		t.Fatal("una regla desconocida se rechaza")
+	}
+
+	if code, _ := adminPost(t, ts, cookie, "ip", map[string]any{"ip": "no-es-ip", "action": "block"}, nil); code != 400 {
+		t.Fatal("una IP inválida se rechaza")
+	}
+	adminPost(t, ts, cookie, "ip", map[string]any{"ip": "203.0.113.7", "action": "block", "reason": "abuso"}, nil)
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	ips := lists["blockedIPs"].([]any)
+	if len(ips) != 1 || ips[0].(map[string]any)["key"] != "203.0.113.7" {
+		t.Fatalf("IPs bloqueadas: %v", ips)
+	}
+	adminPost(t, ts, cookie, "ip", map[string]any{"ip": "203.0.113.7", "action": "unblock"}, nil)
+	_, lists = adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	if len(lists["blockedIPs"].([]any)) != 0 {
+		t.Fatal("IP desbloqueada")
+	}
+}
+
+func TestAdminMod_RelayInfoAndReset(t *testing.T) {
+	owner := newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_NAME": "Original", "RELAY_DESCRIPTION": "Desc original"})
+	cookie := adminLogin(t, ts, owner)
+
+	if code, _ := adminPost(t, ts, cookie, "info", map[string]any{"name": ""}, nil); code != 400 {
+		t.Fatal("el nombre no puede quedar vacío")
+	}
+	if code, _ := adminPost(t, ts, cookie, "info", map[string]any{"icon": "javascript:alert(1)"}, nil); code != 400 {
+		t.Fatal("un icono que no es https ni ruta se rechaza")
+	}
+	code, out := adminPost(t, ts, cookie, "info", map[string]any{"name": "Nuevo nombre", "description": "EN | ES", "icon": "https://example.com/i.png"}, nil)
+	if code != 200 {
+		t.Fatalf("info: %d %v", code, out)
+	}
+	doc := nip11Doc(t, ts)
+	if doc["name"] != "Nuevo nombre" || doc["description"] != "EN | ES" || doc["icon"] != "https://example.com/i.png" {
+		t.Fatalf("NIP-11 tras el cambio: %v %v %v", doc["name"], doc["description"], doc["icon"])
+	}
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	if lists["info"].(map[string]any)["name"] != "Nuevo nombre" || lists["infoDefaults"].(map[string]any)["name"] != "Original" || lists["infoOverrides"].(map[string]any)["name"] != true {
+		t.Fatalf("info/valores por defecto/cambios: %v", lists)
+	}
+	if code, _ := adminPost(t, ts, cookie, "info", map[string]any{"icon": ""}, nil); code != 200 || nip11Doc(t, ts)["icon"] != "" {
+		t.Fatalf("un icono vacío quita el icono: %v", nip11Doc(t, ts)["icon"])
+	}
+	adminPost(t, ts, cookie, "info", map[string]any{"reset": []any{"name", "description", "icon"}}, nil)
+	doc = nip11Doc(t, ts)
+	if doc["name"] != "Original" || doc["description"] != "Desc original" {
+		t.Fatalf("tras restaurar vuelve a la configuración: %v %v", doc["name"], doc["description"])
+	}
+}
+
+func TestAdminMod_ActionsAreLoggedWithoutFullKeys(t *testing.T) {
+	out := &syncBuffer{}
+	prev := LogOutput
+	LogOutput = out
+	defer func() { LogOutput = prev }()
+	owner, spammer := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	cookie := adminLogin(t, ts, owner)
+	adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": spammer.pk, "reason": "motivo secreto"}, nil)
+	log := out.String()
+	if !strings.Contains(log, "admin action=ban-pubkey target="+spammer.pk[:8]) {
+		t.Fatalf("falta la línea de auditoría:\n%s", log)
+	}
+	if strings.Contains(log, spammer.pk) || strings.Contains(log, "secreto") {
+		t.Fatalf("el registro no debe llevar la clave completa ni el motivo:\n%s", log)
 	}
 }

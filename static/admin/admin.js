@@ -84,6 +84,7 @@ async function login() {
 
 async function logout() {
   stop()
+  modState = null
   await fetch('/admin/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
   show('login')
 }
@@ -95,6 +96,7 @@ async function load() {
   if (res.status === 401) { stop(); show('login'); return }
   if (!res.ok) throw new Error(`error ${res.status}`)
   render(await res.json())
+  await loadModeration(false)
   lastOk = Date.now()
   $('updated').textContent = `Actualizado a las ${clock(Math.floor(lastOk / 1000))}`
 }
@@ -111,7 +113,7 @@ function stop() { if (timer) { clearInterval(timer); timer = null } }
 
 function render(d) {
   const now = d.now
-  $('subtitle').textContent = `Solo lectura · versión ${d.version} · en marcha desde hace ${duration(now - d.startedAt)}`
+  $('subtitle').textContent = `Versión ${d.version} · en marcha desde hace ${duration(now - d.startedAt)}`
 
   const rejectedTotal = Object.values(d.activity.reasons).reduce((a, b) => a + b, 0)
   const cards = [
@@ -138,12 +140,26 @@ function render(d) {
     const pk = el('button', { class: 'pk', type: 'button', title: 'Copiar clave completa', text: e.pubkey.slice(0, 12) + '…' })
     pk.addEventListener('click', () => navigator.clipboard.writeText(e.pubkey).then(() => { pk.textContent = 'copiada ✓'; setTimeout(() => { pk.textContent = e.pubkey.slice(0, 12) + '…' }, 1200) }).catch(() => {}))
     const meta = el('div', { class: 'meta' }, el('span', { text: ago(e.createdAt, now) }), el('span', { text: kindName(e.kind) }), pk, e.mine ? el('span', { class: 'badge', text: 'tuyo' }) : null)
+    if (!e.mine) {
+      const acts = el('span', { class: 'actions2' })
+      const ban = el('button', { type: 'button', class: 'act danger', text: 'Banear clave', title: 'Banear la clave de este evento' })
+      ban.addEventListener('click', () => {
+        if (!confirm(`¿Banear la clave ${e.pubkey.slice(0, 12)}…?\nDejará de poder publicar. Puedes deshacerlo desde «Claves baneadas».`)) return
+        const del = confirm('¿Borrar también todos sus eventos guardados?\n(Aceptar = sí, Cancelar = no, solo banear)')
+        act('ban-pubkey', { pubkey: e.pubkey, reason: 'desde eventos recientes', deleteEvents: del }, (r) => (r.deleted ? `Clave baneada y ${r.deleted} evento(s) borrados` : 'Clave baneada'))
+      })
+      const veto = el('button', { type: 'button', class: 'act', text: 'Vetar evento', title: 'Vetar y borrar este evento' })
+      veto.addEventListener('click', () => {
+        if (!confirm('¿Vetar y borrar este evento? No podrá volver a publicarse.')) return
+        act('ban-event', { id: e.id, reason: 'desde eventos recientes' }, () => 'Evento vetado y borrado')
+      })
+      acts.append(veto, ban)
+      meta.append(acts)
+    }
     return el('li', {}, meta, e.content ? el('div', { class: 'body', text: e.content }) : null)
   }))
 
-  const m = d.moderation
   const list = (a) => (a && a.length ? a.join(', ') : 'ninguno')
-  fillKv($('moderation'), [['Claves baneadas', fmt(m.bannedPubkeys)], ['Claves permitidas (lista blanca)', fmt(m.allowedPubkeys)], ['Eventos vetados', fmt(m.bannedEvents)], ['IPs bloqueadas', fmt(m.blockedIPs)], ['Tipos permitidos', list(m.allowedKinds)], ['Tipos prohibidos', list(m.disallowedKinds)]])
   const c = d.config
   fillKv($('config'), [
     ['NIPs', (c.nips || []).join(', ')], ['Contenido máx.', `${fmt(c.maxContentLength)} caracteres`], ['Mensaje máx.', bytes(c.maxMessageBytes)], ['Tags por evento', fmt(c.maxEventTags)],
@@ -181,6 +197,125 @@ function renderChart(minutes) {
   })
   $('chart').replaceChildren(svg)
 }
+
+// ---------- moderación ----------
+
+let toastTimer = null
+function toast(msg, isErr) {
+  const t = $('toast')
+  t.textContent = msg
+  t.className = 'toast show' + (isErr ? ' err' : '')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { t.className = 'toast'; t.textContent = '' }, isErr ? 7000 : 3500)
+}
+
+// Llama a una acción del panel. Devuelve la respuesta; si la sesión caducó, vuelve al login.
+async function api(path, body) {
+  const res = await fetch(`/admin/api/mod/${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (res.status === 401) { stop(); show('login'); throw new Error('La sesión ha caducado: vuelve a entrar') }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `error ${res.status}`)
+  return data
+}
+
+// Hace una acción, avisa del resultado y refresca los datos.
+async function act(path, body, okMsg, opts) {
+  try {
+    const r = await api(path, body)
+    toast(typeof okMsg === 'function' ? okMsg(r) : okMsg, false)
+    await Promise.all([load().catch(() => {}), loadModeration(!!(opts && opts.forceInfo))])
+    return true
+  } catch (err) {
+    toast(err.message || String(err), true)
+    return false
+  }
+}
+
+let modState = null
+function shortKey(k) { return k.length > 16 ? `${k.slice(0, 10)}…${k.slice(-4)}` : k }
+
+function fillList(id, rows, removeLabel, onRemove, describe) {
+  const ul = $(id)
+  if (!rows.length) { ul.replaceChildren(el('li', { class: 'none', text: 'Ninguno' })); return }
+  ul.replaceChildren(...rows.map((r) => {
+    const what = el('span', { class: 'what' }, describe(r), r.reason ? el('span', { class: 'why', text: ` · ${r.reason}` }) : null)
+    const b = el('button', { type: 'button', text: removeLabel })
+    b.addEventListener('click', () => onRemove(r))
+    return el('li', {}, what, b)
+  }))
+}
+
+async function loadModeration(forceInfo) {
+  const res = await fetch('/admin/api/moderation', { credentials: 'same-origin', cache: 'no-store' })
+  if (res.status === 401) { stop(); show('login'); return }
+  if (!res.ok) throw new Error(`error ${res.status}`)
+  const m = await res.json()
+  const first = modState === null
+  modState = m
+
+  fillList('l-banned', m.bannedPubkeys, 'Quitar', (r) => act('unban-pubkey', { pubkey: r.key }, 'Baneo quitado'), (r) => el('code', { text: shortKey(r.key), title: r.key }))
+  fillList('l-allowed', m.allowedPubkeys, 'Quitar', (r) => {
+    const last = m.allowedPubkeys.length === 1
+    if (last && !confirm('Es la última clave de la lista blanca: al quitarla el relé vuelve a ser abierto para todos. ¿Continuar?')) return
+    act('unallow-pubkey', { pubkey: r.key }, 'Clave quitada de la lista blanca')
+  }, (r) => el('code', { text: shortKey(r.key), title: r.key }))
+  fillList('l-events', m.bannedEvents, 'Quitar', (r) => act('unban-event', { id: r.key }, 'Veto quitado'), (r) => el('code', { text: shortKey(r.key), title: r.key }))
+  fillList('l-ips', m.blockedIPs, 'Desbloquear', (r) => act('ip', { ip: r.key, action: 'unblock' }, 'IP desbloqueada'), (r) => el('code', { text: r.key }))
+  const kinds = [...(m.disallowedKinds || []).map((k) => ({ key: String(k), kind: k, reason: '', rule: 'prohibido' })), ...(m.allowedKinds || []).map((k) => ({ key: String(k), kind: k, reason: '', rule: 'permitido' }))]
+  fillList('l-kinds', kinds, 'Quitar', (r) => act('kind', { kind: r.kind, rule: 'clear' }, 'Regla quitada'), (r) => el('span', { text: `${kindName(r.kind)} — ${r.rule}` }))
+
+  // El formulario de información solo se rellena al principio y tras guardar/restaurar:
+  // si se rellenara en cada refresco borraría lo que estés escribiendo.
+  if (first || forceInfo) {
+    const f = $('f-info')
+    f.elements.name.value = m.info.name
+    f.elements.description.value = m.info.description
+    f.elements.icon.value = m.info.icon
+  }
+  for (const k of ['name', 'description', 'icon']) $(`o-${k}`).hidden = !m.infoOverrides[k]
+}
+
+function onSubmit(id, handler) {
+  $(id).addEventListener('submit', async (ev) => {
+    ev.preventDefault()
+    const f = ev.currentTarget
+    const ok = await handler(f)
+    if (ok) f.reset()
+  })
+}
+
+onSubmit('f-ban', (f) => {
+  const pubkey = f.elements.pubkey.value.trim()
+  if (!confirm(`¿Banear esta clave?\n${pubkey}`)) return false
+  return act('ban-pubkey', { pubkey, reason: f.elements.reason.value, deleteEvents: f.elements.deleteEvents.checked }, (r) => (r.deleted ? `Clave baneada y ${r.deleted} evento(s) borrados` : 'Clave baneada'))
+})
+onSubmit('f-allow', (f) => {
+  if (modState && modState.allowedPubkeys.length === 0 && !confirm('Al permitir la primera clave, el relé pasa a ser de escritura restringida: solo podrán publicar las claves permitidas (y tú). ¿Continuar?')) return false
+  return act('allow-pubkey', { pubkey: f.elements.pubkey.value.trim(), reason: f.elements.reason.value }, 'Clave permitida')
+})
+onSubmit('f-event', (f) => {
+  if (!confirm('¿Vetar este evento? Se borra si está guardado y no podrá volver a publicarse.')) return false
+  return act('ban-event', { id: f.elements.id.value.trim(), reason: f.elements.reason.value }, (r) => (r.deleted ? 'Evento vetado y borrado' : 'Evento vetado (no estaba guardado)'))
+})
+onSubmit('f-kind', (f) => {
+  const rule = f.elements.rule.value
+  if (rule === 'allow' && modState && modState.allowedKinds.length === 0 && !confirm('Al permitir el primer tipo, SOLO pasarán los tipos permitidos (el resto se rechaza). ¿Continuar?')) return false
+  return act('kind', { kind: Number(f.elements.kind.value), rule }, 'Regla aplicada')
+})
+onSubmit('f-ip', (f) => act('ip', { ip: f.elements.ip.value.trim(), action: 'block', reason: f.elements.reason.value }, 'IP bloqueada'))
+$('f-info').addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  const f = ev.currentTarget
+  // Solo se envía lo que has cambiado (así un icono vacío que no tocas no da error).
+  const body = {}
+  for (const k of ['name', 'description', 'icon']) if (modState && f.elements[k].value !== modState.info[k]) body[k] = f.elements[k].value
+  if (!Object.keys(body).length) { toast('No hay nada que guardar', false); return }
+  await act('info', body, 'Información guardada', { forceInfo: true })
+})
+$('info-reset').addEventListener('click', async () => {
+  if (!confirm('¿Restaurar nombre, descripción e icono a los de la configuración?')) return
+  await act('info', { reset: ['name', 'description', 'icon'] }, 'Restaurados los de la configuración', { forceInfo: true })
+})
 
 // ---------- arranque ----------
 

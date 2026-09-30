@@ -110,9 +110,24 @@ ReasonTotals`, all in memory). **Privacy rules enforced by tests**: no IPs, reje
 `privateKinds` (4, 13, 14, 1059) content is never sent. The UI is `static/admin/{index.html,admin.js,admin.css}` with a strict
 CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or `innerHTML`** — set widths via CSSOM
 (`el.style.width`) and text via `textContent` (a page test injects `<img onerror>`/`<script>` in a note to prove it).
-Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 1 is read-only;
-moderation is still NIP-86. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
+Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
+
+**Phase 2 — moderation from the panel** (`internal/admin/mod.go`): `GET /admin/api/moderation` (lists, effective info, defaults,
+overrides) and `POST /admin/api/mod/{ban-pubkey,unban-pubkey,allow-pubkey,unallow-pubkey,ban-event,unban-event,kind,ip,info}`.
+Mutations go through `Panel.mutation`: valid session + `Sec-Fetch-Site` same-origin/none + `Origin` equal to ours +
+`Content-Type: application/json` (defence in depth on top of the SameSite=Strict cookie — khatru's CORS is `*`). Inputs accept
+hex or npub / note1 / nevent1 (`nip19`), reasons ≤200 chars, no control characters; name ≤80, description ≤600, icon must be
+https:// or a `/path` (an empty icon = no icon; name/description can't be empty — use `reset`). **The owner is exempt** from
+ban/allow-list/kind rules in `policies.NewModeration(store, owner)` (so a bad list can't lock the owner out) and the API refuses
+to ban the owner. Removing from a list has its own store methods (`UnbanPubKey`, `RemoveAllowedPubKey`, `ClearKindRule`,
+`DeleteSetting`) because NIP-86's `allowpubkey` on a banned key would *enable the allow-list*. Deleting events goes through
+`Server.DeleteEventByID/DeleteEventsByAuthor` (`admin.Effects`), reading the store directly (the private-kinds filter must not
+hide them from the moderator). Each action logs `admin action=… target=<8 chars>` via `activityLog.Admin` — never full keys or
+reasons (tested). **Frontend gotcha**: the moderation *forms are static HTML* and the 15 s auto-refresh only re-renders the
+*lists*; the relay-info form is filled only on first load and after save/restore (`forceInfo`), otherwise the refresh would wipe
+what you're typing. Go serialises nil slices as `null`: every list sent to the panel goes through `nonNil` (a `null` broke
+`.map` in the page once).
 
 ## Deployment
 

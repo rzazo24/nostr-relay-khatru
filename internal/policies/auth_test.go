@@ -119,7 +119,7 @@ func (f fakeMod) KindBlocked(k int) bool        { return f.blockedKinds[k] }
 
 func TestModerationPolicy(t *testing.T) {
 	m := fakeMod{bannedPK: map[string]bool{"spammer": true}, bannedEv: map[string]bool{"bad": true}, blockedKinds: map[int]bool{1984: true}}
-	p := NewModeration(m)
+	p := NewModeration(m, "boss")
 	ctx := context.Background()
 	if reject, _ := p(ctx, &nostr.Event{PubKey: "spammer", Kind: 1}); !reject {
 		t.Fatal("pubkey baneado")
@@ -137,11 +137,17 @@ func TestModerationPolicy(t *testing.T) {
 		t.Fatal("un evento normal pasa")
 	}
 	m.allowedPK = map[string]bool{"friend": true}
-	p = NewModeration(m)
+	p = NewModeration(m, "boss")
 	if reject, _ := p(ctx, &nostr.Event{PubKey: "ok", Kind: 1}); !reject {
 		t.Fatal("con lista blanca solo escriben los permitidos")
 	}
 	if reject, _ := p(ctx, &nostr.Event{PubKey: "friend", Kind: 1}); reject {
 		t.Fatal("un permitido escribe")
+	}
+	// el dueño pasa siempre: baneado, fuera de la lista blanca y con el kind prohibido
+	m.bannedPK["boss"] = true
+	p = NewModeration(m, "boss")
+	if reject, msg := p(ctx, &nostr.Event{PubKey: "boss", Kind: 1984}); reject {
+		t.Fatalf("el dueño nunca debe quedar bloqueado: %s", msg)
 	}
 }

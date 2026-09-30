@@ -30,9 +30,9 @@ import (
 
 // Ajustes que se pueden cambiar en caliente con NIP-86 (changerelayname, etc.).
 const (
-	settingName        = "name"
-	settingDescription = "description"
-	settingIcon        = "icon"
+	settingName        = admin.SettingName
+	settingDescription = admin.SettingDescription
+	settingIcon        = admin.SettingIcon
 )
 
 // Server es el relé ya montado. Relay implementa http.Handler.
@@ -109,7 +109,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 	relay.RejectEvent = append(relay.RejectEvent,
 		s.logEvent(khatrupolicies.EventIPRateLimiter(cfg.EventsPerMinute, time.Minute, cfg.EventsBurst)),
 		s.logEvent(policies.NewAuthRequiredEvent(cfg.AuthRequired, khatru.GetAuthed)),
-		s.logEvent(policies.NewModeration(store)),
+		s.logEvent(policies.NewModeration(store, cfg.PubKey)),
 		s.logEvent(policies.NewEventLimits(policies.EventLimits{
 			MaxContentLength: cfg.MaxContentLength,
 			MaxEventTags:     cfg.MaxEventTags,
@@ -151,15 +151,20 @@ func New(cfg config.Config, version string) (*Server, error) {
 
 	// Panel de control (solo lectura, solo para el dueño): /admin/api/*
 	panel, err := admin.New(admin.Options{
-		Owner:       cfg.PubKey,
-		PublicURL:   cfg.PublicURL,
-		DBPath:      cfg.DBPath,
-		Version:     version,
-		StartedAt:   time.Now(),
-		Activity:    s.act,
-		Moderation:  store,
-		Connections: s.conns.Load,
-		Config:      s.panelConfig(),
+		Owner:        cfg.PubKey,
+		PublicURL:    cfg.PublicURL,
+		DBPath:       cfg.DBPath,
+		Version:      version,
+		StartedAt:    time.Now(),
+		Activity:     s.act,
+		Moderation:   store,
+		Store:        store,
+		Effects:      s,
+		Info:         s.effectiveInfo,
+		InfoDefaults: admin.InfoView{Name: cfg.Name, Description: cfg.Description, Icon: cfg.Icon},
+		Log:          s.act.Admin,
+		Connections:  s.conns.Load,
+		Config:       s.panelConfig(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("no se pudo preparar el panel de control: %w", err)
@@ -324,18 +329,9 @@ func (s *Server) setupManagementAPI() {
 		if err := st.BanEvent(id, reason); err != nil {
 			return err
 		}
-		// además de impedir que vuelva, se borra si ya estaba guardado (se consulta el
-		// almacén directamente: el filtro de eventos privados no debe esconderlo)
-		ch, err := s.db.QueryEvents(ctx, nostr.Filter{IDs: []string{id}, Limit: 1})
-		if err != nil {
-			return err
-		}
-		for ev := range ch {
-			if err := s.db.DeleteEvent(ctx, ev); err != nil {
-				return err
-			}
-		}
-		return nil
+		// además de impedir que vuelva, se borra si ya estaba guardado
+		_, err := s.DeleteEventByID(ctx, id)
+		return err
 	}
 	api.ListBannedEvents = func(ctx context.Context) ([]nip86.IDReason, error) {
 		es := st.BannedEvents()
@@ -391,4 +387,62 @@ func (s *Server) logFilter(p func(ctx context.Context, filter nostr.Filter) (boo
 		}
 		return reject, msg
 	}
+}
+
+// DeleteEventByID borra un evento guardado (si existe). Consulta el almacén directamente: el
+// filtro de eventos privados no debe esconderle el evento a quien modera. Implementa admin.Effects.
+func (s *Server) DeleteEventByID(ctx context.Context, id string) (bool, error) {
+	ch, err := s.db.QueryEvents(ctx, nostr.Filter{IDs: []string{id}, Limit: 1})
+	if err != nil {
+		return false, err
+	}
+	found := false
+	for ev := range ch {
+		if ev.ID != id {
+			continue
+		}
+		if err := s.db.DeleteEvent(ctx, ev); err != nil {
+			return found, err
+		}
+		found = true
+	}
+	return found, nil
+}
+
+// DeleteEventsByAuthor borra como mucho `max` eventos de un pubkey. Implementa admin.Effects.
+func (s *Server) DeleteEventsByAuthor(ctx context.Context, pubkey string, max int) (int, error) {
+	ch, err := s.db.QueryEvents(ctx, nostr.Filter{Authors: []string{pubkey}, Limit: max})
+	if err != nil {
+		return 0, err
+	}
+	var doomed []*nostr.Event
+	for ev := range ch {
+		if ev.PubKey == pubkey {
+			doomed = append(doomed, ev)
+		}
+	}
+	n := 0
+	for _, ev := range doomed {
+		if err := s.db.DeleteEvent(ctx, ev); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// effectiveInfo es el nombre, la descripción y el icono que anuncia NIP-11 ahora mismo
+// (el cambio en caliente de NIP-86 o del panel, o si no lo hay, el de la configuración).
+func (s *Server) effectiveInfo() admin.InfoView {
+	v := admin.InfoView{Name: s.cfg.Name, Description: s.cfg.Description, Icon: s.cfg.Icon}
+	if x, ok := s.Store.Setting(settingName); ok {
+		v.Name = x
+	}
+	if x, ok := s.Store.Setting(settingDescription); ok {
+		v.Description = x
+	}
+	if x, ok := s.Store.Setting(settingIcon); ok {
+		v.Icon = x
+	}
+	return v
 }

@@ -89,3 +89,29 @@ func TestEventsIPsAndPersistence(t *testing.T) {
 		t.Fatalf("ips: %+v", got)
 	}
 }
+
+func TestRemovalsDoNotSideEffectOtherLists(t *testing.T) {
+	s, _ := open(t)
+	s.BanPubKey("aaa", "spam")
+	s.UnbanPubKey("aaa")
+	if s.IsPubKeyBanned("aaa") || s.HasAllowlist() {
+		t.Fatal("quitar un baneo no debe meterlo en la lista blanca")
+	}
+	s.AllowPubKey("bbb", "")
+	s.RemoveAllowedPubKey("bbb")
+	if s.HasAllowlist() || s.IsPubKeyBanned("bbb") {
+		t.Fatal("quitar de la lista blanca la deja vacía sin banear")
+	}
+	s.DisallowKind(7)
+	s.AllowKind(1)
+	s.ClearKindRule(7)
+	s.ClearKindRule(1)
+	if s.KindBlocked(7) || s.KindBlocked(1) || len(s.AllowedKinds()) != 0 || len(s.DisallowedKinds()) != 0 {
+		t.Fatal("ClearKindRule quita la regla, sea cual sea")
+	}
+	s.SetSetting("name", "X")
+	s.DeleteSetting("name")
+	if _, ok := s.Setting("name"); ok {
+		t.Fatal("el ajuste debería haberse borrado")
+	}
+}

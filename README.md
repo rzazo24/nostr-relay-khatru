@@ -131,9 +131,10 @@ optional except `RELAY_DOMAIN` when using Docker.
 
 An invalid value stops the relay at startup with an error naming the variable.
 
-## Control panel (read-only, owner only)
+## Control panel (owner only)
 
-`https://<RELAY_DOMAIN>/admin` is a dashboard for the relay's owner: events stored (by kind), distinct keys, database size, open connections, a per-minute activity chart for the last hour, rejections (by reason and the latest ones) and the newest events with their (trimmed) public content, the moderation lists at a glance and the current configuration. **Phase 1 is read-only**; moderation is still done with NIP-86.
+`https://<RELAY_DOMAIN>/admin` is a control panel for the relay's owner: events stored (by kind), distinct keys, database size, open connections, a per-minute activity chart for the last hour, rejections (by reason and the latest ones) and the newest events with their (trimmed) public content, the moderation lists at a glance and the current configuration. 
+**Moderation from the panel** (applied at once and persisted): ban / unban a public key (hex or `npub`, optionally deleting its stored events), a write allow-list (with at least one key only those — and you — can publish; reading stays open), ban an event by id (`note1…`/`nevent1…`/hex — it is deleted and refused from then on), allow or disallow event kinds, block IPs, and change the relay's name, description and icon (or restore the configured ones). Quick *Ban key* / *Ban event* buttons sit next to each recent event. The owner is never locked out by these lists, and can't ban themselves. Each action is confirmed in the page and leaves a one-line audit entry in the relay log (`admin action=… target=<first 8 chars>`). The same lists are reachable through NIP-86 with any compatible client.
 
 - **Login**: sign a NIP-98 request with the key in `RELAY_PUBKEY` using a NIP-07 browser extension (nos2x, Alby…). The server checks the signature (owner, this exact URL and method, less than a minute old, never reused) and exchanges it for a one-hour session in an `HttpOnly`, `SameSite=Strict`, `Secure` cookie. Login attempts are rate-limited. Without `RELAY_PUBKEY` the panel is disabled.
 - **Privacy**: it never shows IP addresses, and it never shows the content of private messages (kinds 4, 13, 14, 1059). Rejections show only the first 8 characters of the pubkey. Activity history is kept in memory only (lost on restart).

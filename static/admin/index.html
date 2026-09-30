@@ -13,7 +13,7 @@
     <header class="top">
       <div>
         <h1>Panel del relé</h1>
-        <p id="subtitle" class="muted">Solo lectura</p>
+        <p id="subtitle" class="muted">Cargando…</p>
       </div>
       <div class="actions">
         <span id="updated" class="muted" aria-live="off"></span>
@@ -21,6 +21,8 @@
         <button type="button" id="logout" hidden>Cerrar sesión</button>
       </div>
     </header>
+
+    <p id="toast" class="toast" role="status" aria-live="polite"></p>
 
     <section id="login" class="panel" hidden>
       <h2>Entrar</h2>
@@ -60,16 +62,76 @@
         <ul id="recent" class="recent"></ul>
       </section>
 
-      <div class="cols">
-        <section class="panel">
-          <h2>Moderación</h2>
-          <dl id="moderation" class="kv"></dl>
-        </section>
-        <section class="panel">
-          <h2>Configuración</h2>
-          <dl id="config" class="kv"></dl>
-        </section>
-      </div>
+      <section class="panel" id="mod">
+        <h2>Moderación</h2>
+        <p class="muted small">Los cambios se aplican al momento y se guardan (sobreviven a reinicios). Tú, como dueño, nunca quedas bloqueado por estas listas.</p>
+        <div class="modgrid">
+          <div class="box">
+            <h3>Claves baneadas</h3>
+            <ul id="l-banned" class="items"></ul>
+            <form id="f-ban" class="form" autocomplete="off">
+              <input name="pubkey" placeholder="npub… o clave en hex" required aria-label="Clave a banear">
+              <input name="reason" placeholder="Motivo (opcional)" maxlength="200" aria-label="Motivo">
+              <label class="check"><input type="checkbox" name="deleteEvents"> borrar también sus eventos guardados</label>
+              <button type="submit">Banear</button>
+            </form>
+          </div>
+          <div class="box">
+            <h3>Lista blanca de autores</h3>
+            <p class="muted small">Vacía = el relé es abierto. Con al menos una clave, solo esas (y tú) pueden publicar; leer sigue siendo libre.</p>
+            <ul id="l-allowed" class="items"></ul>
+            <form id="f-allow" class="form" autocomplete="off">
+              <input name="pubkey" placeholder="npub… o clave en hex" required aria-label="Clave a permitir">
+              <input name="reason" placeholder="Nota (opcional)" maxlength="200" aria-label="Nota">
+              <button type="submit">Permitir</button>
+            </form>
+          </div>
+          <div class="box">
+            <h3>Eventos vetados</h3>
+            <ul id="l-events" class="items"></ul>
+            <form id="f-event" class="form" autocomplete="off">
+              <input name="id" placeholder="id del evento (hex, note1… o nevent1…)" required aria-label="Evento a vetar">
+              <input name="reason" placeholder="Motivo (opcional)" maxlength="200" aria-label="Motivo">
+              <button type="submit">Vetar y borrar</button>
+            </form>
+          </div>
+          <div class="box">
+            <h3>Tipos de evento</h3>
+            <p class="muted small">«Prohibido» rechaza ese tipo. Si marcas alguno como «permitido», solo pasan los permitidos (el borrado, kind 5, siempre pasa).</p>
+            <ul id="l-kinds" class="items"></ul>
+            <form id="f-kind" class="form inline" autocomplete="off">
+              <input name="kind" type="number" min="0" max="65535" placeholder="kind" required aria-label="Tipo de evento">
+              <select name="rule" aria-label="Regla"><option value="disallow">prohibir</option><option value="allow">permitir</option></select>
+              <button type="submit">Aplicar</button>
+            </form>
+          </div>
+          <div class="box">
+            <h3>IPs bloqueadas</h3>
+            <p class="muted small">El relé no registra IPs: esto sirve para bloquear una dirección que ya conozcas.</p>
+            <ul id="l-ips" class="items"></ul>
+            <form id="f-ip" class="form" autocomplete="off">
+              <input name="ip" placeholder="dirección IP" required aria-label="IP a bloquear">
+              <input name="reason" placeholder="Motivo (opcional)" maxlength="200" aria-label="Motivo">
+              <button type="submit">Bloquear</button>
+            </form>
+          </div>
+          <div class="box">
+            <h3>Información del relé</h3>
+            <p class="muted small">Lo que anuncia el relé (y muestra la página de presentación). Para dos idiomas escribe la descripción como <code>English | Español</code>.</p>
+            <form id="f-info" class="form" autocomplete="off">
+              <label class="lbl">Nombre <span id="o-name" class="badge" hidden>cambiado</span><input name="name" maxlength="80" required></label>
+              <label class="lbl">Descripción <span id="o-description" class="badge" hidden>cambiada</span><textarea name="description" rows="3" maxlength="600" required></textarea></label>
+              <label class="lbl">Icono (https://… o /icon.png) <span id="o-icon" class="badge" hidden>cambiado</span><input name="icon" maxlength="300" placeholder="vacío = sin icono"></label>
+              <div class="btns"><button type="submit" class="primary">Guardar</button><button type="button" id="info-reset">Restaurar los de la configuración</button></div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Configuración</h2>
+        <dl id="config" class="kv"></dl>
+      </section>
     </div>
   </main>
   <script src="/admin/admin.js"></script>

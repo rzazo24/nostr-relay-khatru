@@ -253,3 +253,31 @@ func (s *Store) count(list string) int {
 	defer s.mu.RUnlock()
 	return len(s.lists[list])
 }
+
+// --- quitar de las listas (el panel de control distingue "quitar" de "permitir") ---
+
+// UnbanPubKey saca un pubkey de los baneados SIN meterlo en la lista blanca (a diferencia de
+// AllowPubKey, que activaría la escritura restringida).
+func (s *Store) UnbanPubKey(pubkey string) error { return s.remove(listBannedPubKey, pubkey) }
+
+// RemoveAllowedPubKey saca un pubkey de la lista blanca. Si era el último, el relé vuelve a ser abierto.
+func (s *Store) RemoveAllowedPubKey(pubkey string) error { return s.remove(listAllowedPubKey, pubkey) }
+
+// ClearKindRule quita cualquier regla (permitido o prohibido) sobre un kind.
+func (s *Store) ClearKindRule(kind int) error {
+	if err := s.remove(listAllowedKind, strconv.Itoa(kind)); err != nil {
+		return err
+	}
+	return s.remove(listDisallowedKind, strconv.Itoa(kind))
+}
+
+// DeleteSetting vuelve a un ajuste a su valor de la configuración (borra el cambio en caliente).
+func (s *Store) DeleteSetting(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.db.Exec(`DELETE FROM moderation_settings WHERE key = ?`, key); err != nil {
+		return err
+	}
+	delete(s.settings, key)
+	return nil
+}

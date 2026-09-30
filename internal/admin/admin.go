@@ -19,6 +19,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
+
+	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
 )
 
 const (
@@ -70,16 +72,21 @@ type Moderation interface {
 
 // Options agrupa lo que necesita el panel.
 type Options struct {
-	Owner       string // pubkey (hex) del dueño; vacío = panel desactivado
-	PublicURL   string // URL pública https (si vacía, se deduce de la petición)
-	DBPath      string
-	Version     string
-	StartedAt   time.Time
-	Activity    Activity
-	Moderation  Moderation
-	Connections func() int64
-	Config      map[string]any // límites y NIPs, tal cual se muestran (solo lectura)
-	Now         func() time.Time
+	Owner        string // pubkey (hex) del dueño; vacío = panel desactivado
+	PublicURL    string // URL pública https (si vacía, se deduce de la petición)
+	DBPath       string
+	Version      string
+	StartedAt    time.Time
+	Activity     Activity
+	Moderation   Moderation
+	Store        *moderation.Store // para las acciones de moderación del panel
+	Effects      Effects
+	Info         func() InfoView             // nombre, descripción e icono que anuncia NIP-11 ahora mismo
+	InfoDefaults InfoView                    // los de la configuración (a los que vuelve "restaurar")
+	Log          func(action, target string) // deja constancia (sin contenido ni IPs) de cada acción
+	Connections  func() int64
+	Config       map[string]any // límites y NIPs, tal cual se muestran (solo lectura)
+	Now          func() time.Time
 }
 
 // Panel atiende /admin/api/*.
@@ -126,6 +133,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/api/logout", p.logout)
 	mux.HandleFunc("GET /admin/api/session", p.requireSession(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]any{"ok": true}) }))
 	mux.HandleFunc("GET /admin/api/stats", p.requireSession(p.stats))
+	p.mountModeration(mux)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -485,8 +493,8 @@ func (p *Panel) stats(w http.ResponseWriter, r *http.Request) {
 			"allowedPubkeys":  p.o.Moderation.CountAllowedPubKeys(),
 			"bannedEvents":    p.o.Moderation.CountBannedEvents(),
 			"blockedIPs":      p.o.Moderation.CountBlockedIPs(),
-			"allowedKinds":    p.o.Moderation.AllowedKinds(),
-			"disallowedKinds": p.o.Moderation.DisallowedKinds(),
+			"allowedKinds":    nonNil(p.o.Moderation.AllowedKinds()),
+			"disallowedKinds": nonNil(p.o.Moderation.DisallowedKinds()),
 		},
 		"config": p.o.Config,
 	})

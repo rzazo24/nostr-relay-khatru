@@ -45,3 +45,27 @@ td.reason { white-space:normal; min-width:200px; }
 .pk { font:.85rem ui-monospace,SFMono-Regular,Menlo,monospace; background:none; border:none; padding:0; color:var(--accent); cursor:copy; }
 .badge { font-size:.75rem; border:1px solid var(--accent); color:var(--accent); border-radius:999px; padding:0 8px; }
 .kv { display:grid; grid-template-columns:1fr auto; gap:6px 16px; margin:0; } .kv dt { color:var(--muted); } .kv dd { margin:0; text-align:right; overflow-wrap:anywhere; }
+
+.toast { position:sticky; top:8px; z-index:5; min-height:0; margin:0 0 12px; padding:0; }
+.toast.show { padding:8px 14px; border-radius:8px; background:var(--panel); border:1px solid var(--accent); }
+.toast.err { border-color:var(--red); color:#ff8a9b; }
+.modgrid { display:grid; grid-template-columns:1fr; gap:14px; }
+@media (min-width:900px) { .modgrid { grid-template-columns:1fr 1fr; } }
+.box { border:1px solid var(--border); border-radius:10px; padding:12px; background:rgba(255,255,255,.015); min-width:0; }
+h3 { margin:0 0 8px; font-size:.95rem; }
+code { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:0 4px; font-size:.85em; }
+.items { list-style:none; margin:0 0 10px; padding:0; max-height:220px; overflow-y:auto; }
+.items li { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); font-size:.85rem; }
+.items .what { min-width:0; overflow-wrap:anywhere; } .items .why { color:var(--muted); }
+.items .none { color:var(--muted); justify-content:flex-start; border-bottom:none; }
+.items button, .recent .act { padding:2px 10px; font-size:.8rem; }
+.form { display:flex; flex-direction:column; gap:8px; }
+.form.inline { flex-direction:row; flex-wrap:wrap; align-items:center; }
+input, textarea, select { font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:6px 10px; width:100%; min-width:0; }
+.form.inline input { width:8rem; } .form.inline select { width:auto; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.check { display:flex; gap:8px; align-items:center; color:var(--muted); font-size:.85rem; } .check input { width:auto; }
+.lbl { display:flex; flex-direction:column; gap:4px; color:var(--muted); font-size:.85rem; } .lbl .badge { align-self:flex-start; }
+.btns { display:flex; gap:8px; flex-wrap:wrap; }
+.recent .actions2 { display:flex; gap:6px; margin-left:auto; }
+button.danger { border-color:var(--red); } button.danger:hover { background:var(--red); color:#fff; }

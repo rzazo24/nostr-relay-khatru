@@ -129,6 +129,14 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 
 Un valor inválido detiene el relé al arrancar con un error que nombra la variable.
 
+## Panel de control (solo lectura, solo para el dueño)
+
+`https://<RELAY_DOMAIN>/admin` es un panel para el dueño del relé: eventos guardados (por tipo), claves distintas, tamaño de la base de datos, conexiones abiertas, una gráfica de actividad por minuto de la última hora, los rechazos (por motivo y los últimos) y los eventos más recientes con su contenido público recortado, las listas de moderación de un vistazo y la configuración actual. **La fase 1 es de solo lectura**; la moderación se sigue haciendo con NIP-86.
+
+- **Entrada**: firmas una petición NIP-98 con la clave de `RELAY_PUBKEY` usando una extensión NIP-07 del navegador (nos2x, Alby…). El servidor comprueba la firma (dueño, esta URL y método exactos, de menos de un minuto y sin haberse usado antes) y la cambia por una sesión de una hora en una cookie `HttpOnly`, `SameSite=Strict` y `Secure`. Los intentos de entrada tienen límite de velocidad. Sin `RELAY_PUBKEY` el panel está desactivado.
+- **Privacidad**: nunca muestra direcciones IP ni el contenido de los mensajes privados (kinds 4, 13, 14, 1059). Los rechazos solo llevan los 8 primeros caracteres del pubkey. El histórico de actividad está solo en memoria (se pierde al reiniciar).
+- **Seguridad**: la página tiene una política de contenido estricta (sin script ni estilo en línea) y pone todo lo que recibe como texto, nunca como HTML.
+
 ## Página de presentación
 
 Al abrir la URL del relé en un navegador se ve una pequeña página de presentación (`static/index.html`, `landing.css`, `landing.js`; sin dependencias externas): nombre, icono y descripción del relé, su dirección `wss://` con un botón de copiar, los NIPs soportados, los límites y las reglas, en español e inglés. Se rellena sola con el documento NIP-11 del propio relé, así que siempre está al día. Caddy solo la sirve a los `GET` normales de `/`: los clientes de Nostr (`Accept: application/nostr+json`), los WebSockets y los `POST` de NIP-86 siguen llegando al relé sin tocar.

@@ -33,6 +33,21 @@
 		file_server
 	}
 
+	# Panel de control: la API la atiende el relé (protegida por firma Nostr del dueño); la
+	# interfaz son archivos estáticos con una política de contenido estricta y sin caché.
+	handle /admin/api/* {
+		reverse_proxy relay:3334
+	}
+	@adminpage path /admin /admin/ /admin/admin.js /admin/admin.css
+	handle @adminpage {
+		root * /srv/static
+		@adminroot path /admin /admin/
+		rewrite @adminroot /admin/index.html
+		header Cache-Control "no-cache"
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		file_server
+	}
+
 	handle {
 		reverse_proxy relay:3334
 	}

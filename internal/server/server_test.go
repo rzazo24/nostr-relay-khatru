@@ -559,3 +559,179 @@ func TestActivityLog_RecordsRejectionsWithoutContentOrIPs(t *testing.T) {
 		t.Fatalf("el registro no debe llevar el contenido, las IPs ni el pubkey completo:\n%s", log)
 	}
 }
+
+// ---------- panel de control (/admin/api) ----------
+
+// adminAuth firma un evento NIP-98 para llamar a `path` con `method`.
+func adminAuth(caller keys, ts *httptest.Server, method, path string) string {
+	ev := caller.event(27235, "", nostr.Tags{{"u", ts.URL + path}, {"method", method}})
+	j, _ := json.Marshal(ev)
+	return "Nostr " + base64.StdEncoding.EncodeToString(j)
+}
+
+func adminCall(t *testing.T, ts *httptest.Server, method, path, auth, cookie string) (*http.Response, map[string]any) {
+	t.Helper()
+	req, _ := http.NewRequest(method, ts.URL+path, nil)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	if cookie != "" {
+		req.AddCookie(&http.Cookie{Name: "hs_admin", Value: cookie})
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out map[string]any
+	json.NewDecoder(res.Body).Decode(&out)
+	return res, out
+}
+
+func adminLogin(t *testing.T, ts *httptest.Server, owner keys) string {
+	t.Helper()
+	res, body := adminCall(t, ts, "POST", "/admin/api/login", adminAuth(owner, ts, "POST", "/admin/api/login"), "")
+	if res.StatusCode != 200 {
+		t.Fatalf("el login del dueño debería funcionar: %d %v", res.StatusCode, body)
+	}
+	for _, c := range res.Cookies() {
+		if c.Name == "hs_admin" {
+			if !c.HttpOnly || c.SameSite != http.SameSiteStrictMode {
+				t.Fatalf("la cookie debe ser HttpOnly y SameSite=Strict: %+v", c)
+			}
+			return c.Value
+		}
+	}
+	t.Fatal("no se estableció la cookie de sesión")
+	return ""
+}
+
+func TestAdminPanel_LoginRules(t *testing.T) {
+	owner, stranger := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", ""); res.StatusCode != 401 {
+		t.Fatalf("las estadísticas exigen sesión: %d", res.StatusCode)
+	}
+	if res, body := adminCall(t, ts, "POST", "/admin/api/login", adminAuth(stranger, ts, "POST", "/admin/api/login"), ""); res.StatusCode != 401 || !strings.Contains(fmt.Sprint(body["error"]), "owner") {
+		t.Fatalf("un extraño no puede entrar: %d %v", res.StatusCode, body)
+	}
+	// firma para otra URL, otro método, caducada o repetida
+	if res, _ := adminCall(t, ts, "POST", "/admin/api/login", adminAuth(owner, ts, "POST", "/admin/api/otra"), ""); res.StatusCode != 401 {
+		t.Fatal("una firma para otra URL no vale")
+	}
+	if res, _ := adminCall(t, ts, "POST", "/admin/api/login", adminAuth(owner, ts, "GET", "/admin/api/login"), ""); res.StatusCode != 401 {
+		t.Fatal("una firma para otro método no vale")
+	}
+	old := owner.event(27235, "", nostr.Tags{{"u", ts.URL + "/admin/api/login"}, {"method", "POST"}})
+	old.CreatedAt = nostr.Now() - 600
+	old.Sign(owner.sk)
+	oj, _ := json.Marshal(old)
+	if res, _ := adminCall(t, ts, "POST", "/admin/api/login", "Nostr "+base64.StdEncoding.EncodeToString(oj), ""); res.StatusCode != 401 {
+		t.Fatal("una firma de hace 10 minutos no vale")
+	}
+	auth := adminAuth(owner, ts, "POST", "/admin/api/login")
+	if res, _ := adminCall(t, ts, "POST", "/admin/api/login", auth, ""); res.StatusCode != 200 {
+		t.Fatal("la primera vez sí")
+	}
+	if res, body := adminCall(t, ts, "POST", "/admin/api/login", auth, ""); res.StatusCode != 401 || !strings.Contains(fmt.Sprint(body["error"]), "already used") {
+		t.Fatalf("la misma firma no puede repetirse: %d %v", res.StatusCode, body)
+	}
+}
+
+func TestAdminPanel_DisabledWithoutAnOwner(t *testing.T) {
+	_, ts := start(t, nil)
+	if res, _ := adminCall(t, ts, "POST", "/admin/api/login", adminAuth(newKeys(), ts, "POST", "/admin/api/login"), ""); res.StatusCode != 403 {
+		t.Fatalf("sin RELAY_PUBKEY el panel está desactivado: %d", res.StatusCode)
+	}
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", "cualquiera"); res.StatusCode != 403 {
+		t.Fatal("y las estadísticas también")
+	}
+}
+
+func TestAdminPanel_SessionsAndStats(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_MAX_CONTENT_LENGTH": "50"})
+	r := connect(t, ts)
+
+	publish(r, owner.event(1, "nota del dueño", nil))
+	publish(r, someone.event(1, "nota de un desconocido\ncon salto", nil))
+	publish(r, someone.event(4, "contenido privado", nostr.Tags{{"p", owner.pk}}))
+	publish(r, someone.event(1, strings.Repeat("x", 80), nil)) // rechazada por tamaño
+	time.Sleep(150 * time.Millisecond)
+
+	cookie := adminLogin(t, ts, owner)
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/session", "", cookie); res.StatusCode != 200 {
+		t.Fatal("la sesión debería valer")
+	}
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", "token-falso"); res.StatusCode != 401 {
+		t.Fatal("un token inventado no vale")
+	}
+
+	res, body := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("stats: %d, cache=%q", res.StatusCode, res.Header.Get("Cache-Control"))
+	}
+	events := body["events"].(map[string]any)
+	if events["total"].(float64) != 3 || events["pubkeys"].(float64) != 2 {
+		t.Fatalf("recuento de eventos: %v", events)
+	}
+	var sawPrivate, sawStranger bool
+	for _, e := range events["recent"].([]any) {
+		ev := e.(map[string]any)
+		if ev["kind"].(float64) == 4 {
+			sawPrivate = true
+			if _, has := ev["content"]; has {
+				t.Fatal("el contenido de un mensaje privado no debe llegar al panel")
+			}
+		}
+		if ev["pubkey"] == someone.pk && ev["kind"].(float64) == 1 {
+			sawStranger = true
+			if strings.Contains(fmt.Sprint(ev["content"]), "\n") || ev["mine"] != false {
+				t.Fatalf("el desconocido: %v", ev)
+			}
+		}
+	}
+	if !sawPrivate || !sawStranger {
+		t.Fatalf("faltan eventos recientes: %v", events["recent"])
+	}
+	activity := body["activity"].(map[string]any)
+	if len(activity["minutes"].([]any)) != 60 {
+		t.Fatal("el histórico son 60 minutos")
+	}
+	if activity["reasons"].(map[string]any)["invalid"] != float64(1) {
+		t.Fatalf("debería constar el rechazo por tamaño: %v", activity["reasons"])
+	}
+	rej := activity["rejections"].([]any)
+	if len(rej) == 0 || rej[0].(map[string]any)["pubkey"] != someone.pk[:8] || len(rej[0].(map[string]any)["pubkey"].(string)) != 8 {
+		t.Fatalf("los rechazos llevan solo un trozo del pubkey: %v", rej)
+	}
+	if body["config"].(map[string]any)["maxContentLength"] != float64(50) || body["connections"].(float64) < 1 {
+		t.Fatalf("config/conexiones: %v %v", body["config"], body["connections"])
+	}
+
+	// cerrar sesión invalida el token
+	adminCall(t, ts, "POST", "/admin/api/logout", "", cookie)
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie); res.StatusCode != 401 {
+		t.Fatal("tras cerrar sesión el token ya no vale")
+	}
+}
+
+func TestAdminPanel_ReadOnlyAndNoInterferenceWithNostr(t *testing.T) {
+	owner := newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+	// el panel usa la misma base de datos: publicar mientras se consultan estadísticas debe seguir funcionando
+	for i := 0; i < 5; i++ {
+		if err := publish(r, owner.event(1, fmt.Sprintf("n%d", i), nil)); err != nil {
+			t.Fatal(err)
+		}
+		if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie); res.StatusCode != 200 {
+			t.Fatal("las estadísticas deberían seguir respondiendo")
+		}
+	}
+	if nip11Doc(t, ts)["name"] == nil {
+		t.Fatal("NIP-11 debe seguir funcionando junto a /admin")
+	}
+}

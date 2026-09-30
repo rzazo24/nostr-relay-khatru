@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/fiatjaf/eventstore"
@@ -21,6 +22,7 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/nbd-wtf/go-nostr/nip86"
 
+	"github.com/rzazo24/nostr-relay-khatru/internal/admin"
 	"github.com/rzazo24/nostr-relay-khatru/internal/config"
 	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
 	"github.com/rzazo24/nostr-relay-khatru/internal/policies"
@@ -42,6 +44,8 @@ type Server struct {
 	db      *sqlite3.SQLite3Backend
 	private policies.PrivateKinds
 	act     *activityLog
+	panel   *admin.Panel
+	conns   atomic.Int64 // conexiones WebSocket abiertas ahora
 }
 
 // New construye el relé. `version` aparece en el documento NIP-11.
@@ -140,11 +144,60 @@ func New(cfg config.Config, version string) (*Server, error) {
 	}
 
 	s.setupManagementAPI()
+
+	// Conexiones abiertas (para el panel de control).
+	relay.OnConnect = append(relay.OnConnect, func(ctx context.Context) { s.conns.Add(1) })
+	relay.OnDisconnect = append(relay.OnDisconnect, func(ctx context.Context) { s.conns.Add(-1) })
+
+	// Panel de control (solo lectura, solo para el dueño): /admin/api/*
+	panel, err := admin.New(admin.Options{
+		Owner:       cfg.PubKey,
+		PublicURL:   cfg.PublicURL,
+		DBPath:      cfg.DBPath,
+		Version:     version,
+		StartedAt:   time.Now(),
+		Activity:    s.act,
+		Moderation:  store,
+		Connections: s.conns.Load,
+		Config:      s.panelConfig(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo preparar el panel de control: %w", err)
+	}
+	s.panel = panel
+	panel.Mount(relay.Router())
 	return s, nil
+}
+
+// panelConfig es lo que el panel muestra de la configuración (solo lectura, sin secretos).
+func (s *Server) panelConfig() map[string]any {
+	c := s.cfg
+	return map[string]any{
+		"name":                c.Name,
+		"nips":                s.Relay.Info.SupportedNIPs,
+		"maxContentLength":    c.MaxContentLength,
+		"maxMessageBytes":     s.Relay.MaxMessageSize,
+		"maxEventTags":        c.MaxEventTags,
+		"maxTagValueBytes":    c.MaxTagValueBytes,
+		"maxLimit":            c.MaxLimit,
+		"maxNegentropyEvents": c.MaxNegentropyEvents,
+		"maxFutureSkewSec":    int(c.MaxFutureSkew.Seconds()),
+		"minPoW":              c.MinPoW,
+		"authRequired":        c.AuthRequired,
+		"privateKinds":        c.PrivateKinds,
+		"allowedKinds":        c.AllowedKinds,
+		"eventsPerMinute":     c.EventsPerMinute,
+		"eventsBurst":         c.EventsBurst,
+		"reqsPerMinute":       c.ReqsPerMinute,
+		"reqsBurst":           c.ReqsBurst,
+		"connsPerMinute":      c.ConnsPerMinute,
+		"connsBurst":          c.ConnsBurst,
+	}
 }
 
 // Close libera la moderación y el almacén.
 func (s *Server) Close() {
+	s.panel.Close()
 	s.Store.Close()
 	s.db.Close()
 }

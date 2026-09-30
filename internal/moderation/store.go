@@ -241,3 +241,15 @@ func (s *Store) Setting(key string) (string, bool) {
 	v, ok := s.settings[key]
 	return v, ok
 }
+
+// Recuentos para el panel de control (no exponen los elementos, solo cuántos hay).
+func (s *Store) CountBannedPubKeys() int  { return s.count(listBannedPubKey) }
+func (s *Store) CountAllowedPubKeys() int { return s.count(listAllowedPubKey) }
+func (s *Store) CountBannedEvents() int   { return s.count(listBannedEvent) }
+func (s *Store) CountBlockedIPs() int     { return s.count(listBlockedIP) }
+
+func (s *Store) count(list string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.lists[list])
+}

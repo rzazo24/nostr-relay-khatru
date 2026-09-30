@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Panel del relé</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <main>
+    <header class="top">
+      <div>
+        <h1>Panel del relé</h1>
+        <p id="subtitle" class="muted">Solo lectura</p>
+      </div>
+      <div class="actions">
+        <span id="updated" class="muted" aria-live="off"></span>
+        <button type="button" id="refresh" hidden>Actualizar</button>
+        <button type="button" id="logout" hidden>Cerrar sesión</button>
+      </div>
+    </header>
+
+    <section id="login" class="panel" hidden>
+      <h2>Entrar</h2>
+      <p>Este panel es solo para el dueño del relé. Entras firmando con tu clave de Nostr (extensión NIP-07, por ejemplo nos2x): la clave privada nunca sale de la extensión.</p>
+      <button type="button" id="login-btn" class="primary">Entrar con Nostr</button>
+      <p id="login-msg" class="msg" role="status"></p>
+    </section>
+
+    <div id="dash" hidden>
+      <section class="cards" id="cards" aria-label="Resumen"></section>
+
+      <section class="panel">
+        <h2>Actividad · últimos 60 minutos</h2>
+        <div id="chart" class="chart" role="img" aria-label="Actividad por minuto"></div>
+        <p class="legend">
+          <span><i class="sw saved"></i> guardados</span>
+          <span><i class="sw ephemeral"></i> efímeros</span>
+          <span><i class="sw rejected"></i> rechazados</span>
+        </p>
+      </section>
+
+      <div class="cols">
+        <section class="panel">
+          <h2>Eventos por tipo</h2>
+          <div id="kinds"></div>
+        </section>
+        <section class="panel">
+          <h2>Rechazos</h2>
+          <div id="reasons" class="chips"></div>
+          <div class="scroll"><table id="rejections"><thead><tr><th>Hora</th><th>Qué</th><th>Tipo</th><th>Clave</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h2>Eventos recientes</h2>
+        <p class="muted small">Contenido de las notas públicas, recortado. Los mensajes privados no muestran su contenido. Pulsa una clave para copiarla completa.</p>
+        <ul id="recent" class="recent"></ul>
+      </section>
+
+      <div class="cols">
+        <section class="panel">
+          <h2>Moderación</h2>
+          <dl id="moderation" class="kv"></dl>
+        </section>
+        <section class="panel">
+          <h2>Configuración</h2>
+          <dl id="config" class="kv"></dl>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

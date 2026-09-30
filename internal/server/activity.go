@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rzazo24/nostr-relay-khatru/internal/admin"
 )
 
 // LogOutput es dónde escribe el registro de actividad (docker compose logs lo recoge
@@ -32,10 +34,38 @@ type activityLog struct {
 	rejected         map[string]int // motivo (prefijo) -> total en la ventana
 	printed          map[string]int // motivo -> líneas ya impresas en la ventana
 	authed           int
+
+	// Para el panel de control: histórico por minuto (últimas 2 h), rechazos recientes y
+	// totales por motivo desde que arrancó el relé. Solo en memoria, sin contenido ni IPs.
+	minutes      map[int64]*admin.Minute
+	recent       []admin.Rejection
+	reasonTotals map[string]int
 }
 
+const (
+	historyMinutes = 120
+	recentKept     = 100
+)
+
 func newActivityLog(out io.Writer, now func() time.Time) *activityLog {
-	return &activityLog{out: out, now: now, windowFrom: now(), rejected: map[string]int{}, printed: map[string]int{}}
+	return &activityLog{out: out, now: now, windowFrom: now(), rejected: map[string]int{}, printed: map[string]int{},
+		minutes: map[int64]*admin.Minute{}, reasonTotals: map[string]int{}}
+}
+
+// bucketLocked devuelve el contador del minuto actual (y descarta los muy antiguos).
+func (a *activityLog) bucketLocked() *admin.Minute {
+	start := a.now().Unix() / 60 * 60
+	b := a.minutes[start]
+	if b == nil {
+		b = &admin.Minute{T: start}
+		a.minutes[start] = b
+		for t := range a.minutes {
+			if t < start-historyMinutes*60 {
+				delete(a.minutes, t)
+			}
+		}
+	}
+	return b
 }
 
 // reasonKey reduce un motivo a su prefijo ("rate-limited", "blocked", "pow"...) para
@@ -61,6 +91,12 @@ func (a *activityLog) Rejected(what string, kind int, pubkey, reason string) {
 	a.rollLocked()
 	key := reasonKey(reason)
 	a.rejected[key]++
+	a.reasonTotals[key]++
+	a.bucketLocked().Rejected++
+	a.recent = append(a.recent, admin.Rejection{T: a.now().Unix(), What: what, Kind: kind, Pubkey: shortKey(pubkey), Reason: reason})
+	if len(a.recent) > recentKept {
+		a.recent = a.recent[len(a.recent)-recentKept:]
+	}
 	if a.printed[key] >= maxRejectLinesPerReasonPerMinute {
 		return
 	}
@@ -73,6 +109,7 @@ func (a *activityLog) Saved() {
 	defer a.mu.Unlock()
 	a.rollLocked()
 	a.saved++
+	a.bucketLocked().Saved++
 }
 
 func (a *activityLog) Ephemeral() {
@@ -80,6 +117,7 @@ func (a *activityLog) Ephemeral() {
 	defer a.mu.Unlock()
 	a.rollLocked()
 	a.ephemeral++
+	a.bucketLocked().Ephemeral++
 }
 
 func (a *activityLog) Authenticated() {
@@ -87,6 +125,7 @@ func (a *activityLog) Authenticated() {
 	defer a.mu.Unlock()
 	a.rollLocked()
 	a.authed++
+	a.bucketLocked().Authenticated++
 }
 
 // rollLocked cierra la ventana de un minuto imprimiendo el resumen si hubo actividad.
@@ -113,4 +152,45 @@ func (a *activityLog) rollLocked() {
 	a.saved, a.ephemeral, a.authed = 0, 0, 0
 	a.rejected = map[string]int{}
 	a.printed = map[string]int{}
+}
+
+// --- lo que consulta el panel de control (implementa admin.Activity) ---
+
+// Minutes devuelve los últimos n minutos (el actual incluido), con ceros en los sin actividad.
+func (a *activityLog) Minutes(now time.Time, n int) []admin.Minute {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	end := now.Unix() / 60 * 60
+	out := make([]admin.Minute, 0, n)
+	for i := n - 1; i >= 0; i-- {
+		t := end - int64(i)*60
+		if b, ok := a.minutes[t]; ok {
+			out = append(out, *b)
+		} else {
+			out = append(out, admin.Minute{T: t})
+		}
+	}
+	return out
+}
+
+// Rejections devuelve los últimos rechazos, el más reciente primero.
+func (a *activityLog) Rejections(limit int) []admin.Rejection {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]admin.Rejection, 0, limit)
+	for i := len(a.recent) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, a.recent[i])
+	}
+	return out
+}
+
+// ReasonTotals devuelve los rechazos por motivo desde que arrancó el relé.
+func (a *activityLog) ReasonTotals() map[string]int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make(map[string]int, len(a.reasonTotals))
+	for k, v := range a.reasonTotals {
+		out[k] = v
+	}
+	return out
 }

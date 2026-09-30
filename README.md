@@ -131,6 +131,14 @@ optional except `RELAY_DOMAIN` when using Docker.
 
 An invalid value stops the relay at startup with an error naming the variable.
 
+## Control panel (read-only, owner only)
+
+`https://<RELAY_DOMAIN>/admin` is a dashboard for the relay's owner: events stored (by kind), distinct keys, database size, open connections, a per-minute activity chart for the last hour, rejections (by reason and the latest ones) and the newest events with their (trimmed) public content, the moderation lists at a glance and the current configuration. **Phase 1 is read-only**; moderation is still done with NIP-86.
+
+- **Login**: sign a NIP-98 request with the key in `RELAY_PUBKEY` using a NIP-07 browser extension (nos2x, Alby…). The server checks the signature (owner, this exact URL and method, less than a minute old, never reused) and exchanges it for a one-hour session in an `HttpOnly`, `SameSite=Strict`, `Secure` cookie. Login attempts are rate-limited. Without `RELAY_PUBKEY` the panel is disabled.
+- **Privacy**: it never shows IP addresses, and it never shows the content of private messages (kinds 4, 13, 14, 1059). Rejections show only the first 8 characters of the pubkey. Activity history is kept in memory only (lost on restart).
+- **Safety**: the page has a strict Content-Security-Policy (no inline script or style) and puts everything it receives into the page as text, never as HTML.
+
 ## Landing page
 
 Opening the relay's URL in a browser shows a small presentation page (`static/index.html`, `landing.css`, `landing.js`; no external dependencies): the relay's name, icon and description, its `wss://` address with a copy button, the supported NIPs, the limits and the rules, in English and Spanish. It fills itself in from the relay's own NIP-11 document, so it is always up to date. Caddy serves it only to plain `GET`s of `/` — Nostr clients (`Accept: application/nostr+json`), WebSockets and NIP-86 `POST`s still reach the relay untouched.

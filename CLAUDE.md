@@ -98,6 +98,22 @@ with sqlite in a temp dir and talks to it with the go-nostr client (AUTH, NIP-98
 management calls, NEG sync, NIP-11). Rate limits are raised in `start()`. When a NIP-42 test
 authenticates right after connecting, the challenge arrives asynchronously — `keys.auth` retries.
 
+## Control panel (`/admin`)
+
+`internal/admin` = read-only API under `/admin/api/*` mounted on khatru's `Router()` mux (khatru wraps it in CORS `*`, so
+protection is the session cookie: `HttpOnly`, `SameSite=Strict`, `Secure` when HTTPS — never rely on CORS). Login =
+NIP-98 (kind 27235) signed by `RELAY_PUBKEY`, `u` = exact URL (from `RELAY_PUBLIC_URL` or `X-Forwarded-*`), `method` =
+POST, ±60 s, each signature id single-use (3 min memory), 10 attempts/min/IP; exchanged for a 1 h in-memory session (max 5,
+lost on restart). No owner → 403. Stats come from a second sqlite connection opened `_query_only=true` (results cached
+10 s) plus `activityLog` (per-minute buckets for 2 h, last 100 rejections, totals by reason: `Minutes/Rejections/
+ReasonTotals`, all in memory). **Privacy rules enforced by tests**: no IPs, rejections carry only 8 chars of the pubkey, and
+`privateKinds` (4, 13, 14, 1059) content is never sent. The UI is `static/admin/{index.html,admin.js,admin.css}` with a strict
+CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or `innerHTML`** — set widths via CSSOM
+(`el.style.width`) and text via `textContent` (a page test injects `<img onerror>`/`<script>` in a note to prove it).
+Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 1 is read-only;
+moderation is still NIP-86. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
+`/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
+
 ## Deployment
 
 **Reboot verified (2026-09-30)**: after a real server reboot both containers came back on their own (`restart: unless-stopped`,

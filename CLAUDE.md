@@ -113,6 +113,19 @@ CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or 
 Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
 
+**Retention** (`internal/retention`): `RELAY_RETENTION_DAYS` (0 = off) → hourly pass (first one 1 min after start) that deletes
+*regular* kinds (`nostr.IsRegularKind`: <10000 except 0 and 3) older than N days, never the owner's events, never
+replaceable/addressable ones (current account state), max 20 000 per pass, paging by `Until` from the oldest seen. It uses the raw
+store (`db.QueryEvents/DeleteEvent`) so the private-kinds filter doesn't hide anything. Logs `retention deleted=…` only when it
+deleted something. `Server.RunRetentionOnce` exists for tests. Production: 180 days. The panel shows `perDay` (events by
+creation date, last 14 days — *creation* date, not arrival) and the setting.
+
+**Restore / deploy scripts**: `scripts/restore-db.sh` (integrity check → refuses if a container uses the volume → saves
+`pre-restore-*.sqlite.gz` → swaps the file, removes `-wal/-shm`; rehearse with `VOLUME_NAME=<scratch>`; never run it with
+`--yes` against the production volume to "test" it) and `scripts/deploy.sh` (exports `VERSION=$(git describe --tags --always
+--dirty)` which compose passes as a build arg → `main.version` → NIP-11/panel/landing). Use deploy.sh instead of a bare
+`docker compose up --build`, or the version shows as `dev`. Caddy sends HSTS (`max-age=31536000`, no subdomains/preload).
+
 **Built-in help** (`<dialog id="help">` in `static/admin/index.html`, static Spanish HTML; opened by the *Ayuda* button and the `?`
 /`data-help="h-…"` buttons next to each section title, scrolling inside the dialog — the TOC links are intercepted so the URL
 doesn't change). **When you add a card, config field or moderation box, add its explanation to the help**: a Playwright check

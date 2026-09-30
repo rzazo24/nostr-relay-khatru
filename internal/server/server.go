@@ -26,6 +26,7 @@ import (
 	"github.com/rzazo24/nostr-relay-khatru/internal/config"
 	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
 	"github.com/rzazo24/nostr-relay-khatru/internal/policies"
+	"github.com/rzazo24/nostr-relay-khatru/internal/retention"
 )
 
 // Ajustes que se pueden cambiar en caliente con NIP-86 (changerelayname, etc.).
@@ -45,7 +46,8 @@ type Server struct {
 	private policies.PrivateKinds
 	act     *activityLog
 	panel   *admin.Panel
-	conns   atomic.Int64 // conexiones WebSocket abiertas ahora
+	stop    context.CancelFunc // detiene las tareas de fondo (barrido de retención)
+	conns   atomic.Int64       // conexiones WebSocket abiertas ahora
 }
 
 // New construye el relé. `version` aparece en el documento NIP-11.
@@ -171,6 +173,11 @@ func New(cfg config.Config, version string) (*Server, error) {
 	}
 	s.panel = panel
 	panel.Mount(relay.Router())
+
+	// Retención: borra de vez en cuando los eventos regulares más viejos que RELAY_RETENTION_DAYS.
+	ctx, cancel := context.WithCancel(context.Background())
+	s.stop = cancel
+	go retention.Start(ctx, s.db.QueryEvents, s.db.DeleteEvent, cfg.RetentionDays, cfg.PubKey, time.Hour, s.act.Retention)
 	return s, nil
 }
 
@@ -191,6 +198,7 @@ func (s *Server) panelConfig() map[string]any {
 		"authRequired":        c.AuthRequired,
 		"privateKinds":        c.PrivateKinds,
 		"allowedKinds":        c.AllowedKinds,
+		"retentionDays":       c.RetentionDays,
 		"eventsPerMinute":     c.EventsPerMinute,
 		"eventsBurst":         c.EventsBurst,
 		"reqsPerMinute":       c.ReqsPerMinute,
@@ -202,6 +210,7 @@ func (s *Server) panelConfig() map[string]any {
 
 // Close libera la moderación y el almacén.
 func (s *Server) Close() {
+	s.stop()
 	s.panel.Close()
 	s.Store.Close()
 	s.db.Close()
@@ -445,4 +454,10 @@ func (s *Server) effectiveInfo() admin.InfoView {
 		v.Icon = x
 	}
 	return v
+}
+
+// RunRetentionOnce hace ahora una pasada de retención (la misma que corre cada hora) y devuelve lo
+// que borró. Lo usan las pruebas.
+func (s *Server) RunRetentionOnce(ctx context.Context) (retention.Result, error) {
+	return retention.SweepOnce(ctx, s.db.QueryEvents, s.db.DeleteEvent, time.Now(), s.cfg.RetentionDays, s.cfg.PubKey)
 }

@@ -973,3 +973,75 @@ func TestAdminMod_ActionsAreLoggedWithoutFullKeys(t *testing.T) {
 		t.Fatalf("el registro no debe llevar la clave completa ni el motivo:\n%s", log)
 	}
 }
+
+// ---------- retención ----------
+
+func oldEvent(k keys, kind int, content string, daysAgo int) nostr.Event {
+	ev := nostr.Event{Kind: kind, Content: content, CreatedAt: nostr.Now() - nostr.Timestamp(daysAgo*86400), PubKey: k.pk}
+	ev.Sign(k.sk)
+	return ev
+}
+
+func TestRetention_RealStoreKeepsWhatItShould(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	srv, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_RETENTION_DAYS": "30"})
+	r := connect(t, ts)
+
+	oldNote := oldEvent(someone, 1, "nota vieja", 100)
+	oldReaction := oldEvent(someone, 7, "+", 40)
+	oldProfile := oldEvent(someone, 0, `{"name":"x"}`, 400) // estado de la cuenta: se conserva
+	oldOwner := oldEvent(owner, 1, "vieja del dueño", 400)  // del dueño: se conserva
+	recent := oldEvent(someone, 1, "reciente", 5)
+	for _, ev := range []nostr.Event{oldNote, oldReaction, oldProfile, oldOwner, recent} {
+		if err := publish(r, ev); err != nil {
+			t.Fatalf("publicar %q: %v", ev.Content, err)
+		}
+	}
+
+	res, err := srv.RunRetentionOnce(context.Background())
+	if err != nil || res.Deleted != 2 {
+		t.Fatalf("debería borrar la nota y la reacción viejas: %+v %v", res, err)
+	}
+	for id, want := range map[string]bool{oldNote.ID: false, oldReaction.ID: false, oldProfile.ID: true, oldOwner.ID: true, recent.ID: true} {
+		got, _ := fetch(t, r, nostr.Filter{IDs: []string{id}})
+		if (len(got) == 1) != want {
+			t.Errorf("evento %s: presente=%v, se esperaba %v", id[:8], len(got) == 1, want)
+		}
+	}
+}
+
+func TestRetention_OffByDefault(t *testing.T) {
+	someone := newKeys()
+	srv, ts := start(t, nil)
+	r := connect(t, ts)
+	ev := oldEvent(someone, 1, "muy vieja", 2000)
+	publish(r, ev)
+	res, err := srv.RunRetentionOnce(context.Background())
+	if err != nil || res.Deleted != 0 {
+		t.Fatalf("sin RELAY_RETENTION_DAYS no se borra nada: %+v %v", res, err)
+	}
+	if got, _ := fetch(t, r, nostr.Filter{IDs: []string{ev.ID}}); len(got) != 1 {
+		t.Fatal("el evento debería seguir ahí")
+	}
+}
+
+func TestAdminPanel_ShowsGrowthPerDayAndRetention(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_RETENTION_DAYS": "90"})
+	r := connect(t, ts)
+	publish(r, oldEvent(someone, 1, "hoy", 0))
+	publish(r, oldEvent(someone, 1, "hoy 2", 0))
+	publish(r, oldEvent(someone, 1, "hace 3 días", 3))
+	cookie := adminLogin(t, ts, owner)
+	_, body := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+	perDay := body["events"].(map[string]any)["perDay"].([]any)
+	if len(perDay) != 2 {
+		t.Fatalf("dos días con eventos: %v", perDay)
+	}
+	if perDay[len(perDay)-1].(map[string]any)["count"] != float64(2) {
+		t.Fatalf("hoy hay 2 eventos: %v", perDay)
+	}
+	if body["config"].(map[string]any)["retentionDays"] != float64(90) {
+		t.Fatalf("la retención debe verse en la configuración: %v", body["config"])
+	}
+}

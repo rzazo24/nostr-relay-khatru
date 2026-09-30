@@ -150,6 +150,26 @@ Para que la descripción sea bilingüe, escríbela como `English text | Texto en
 
 Los clientes muestran el `icon` de NIP-11. Pon una imagen cuadrada (PNG/JPG/WebP, ~512×512, ligera) en `static/`, define `RELAY_ICON=/icon.png` y Caddy la sirve en `https://<RELAY_DOMAIN>/icon.png` (`static/icon.png` y `static/icon.svg` son los de la instancia pública). Mejor PNG: muchas apps nativas no renderizan SVG. `changerelayicon` de NIP-86 lo cambia en caliente.
 
+## Retención de datos
+
+Un relé abierto acumula eventos para siempre si no le dices otra cosa. `RELAY_RETENTION_DAYS=N` activa una pasada en segundo plano (un minuto tras arrancar y luego cada hora, como mucho 20 000 borrados por pasada) que elimina los eventos **normales** con más de `N` días: notas, reacciones, reposts, peticiones de borrado, mensajes directos… Nunca borra lo que describe el *estado actual* de una cuenta (perfiles, contactos, listas de relés y demás tipos reemplazables o direccionables: uno por cuenta y tipo) ni nada publicado por el dueño (`RELAY_PUBKEY`). `0` (el valor por defecto) lo guarda todo. Cada pasada que borra algo deja una línea `retention deleted=… scanned=…` en el log. El panel de control muestra el ajuste y una gráfica de *eventos por día* para valorar el ritmo de crecimiento. La instancia de producción usa 180 días.
+
+## Restaurar un backup
+
+Los backups (`scripts/backup-db.sh`, cada noche en el cron) son copias consistentes de SQLite. Para restaurar uno:
+
+```bash
+docker compose stop relay
+./scripts/restore-db.sh ~/backups/nostr-relay-khatru/nostr-relay-khatru-<fecha>.sqlite.gz
+docker compose up -d relay
+```
+
+El script comprueba que el backup se descomprime y pasa el `integrity_check` de SQLite, se niega a ejecutarse mientras un contenedor use el volumen, guarda la base de datos *actual* como `pre-restore-<fecha>.sqlite.gz` (por si te equivocas de backup), cambia el archivo y borra los `-wal`/`-shm` viejos. Te pide escribir `restaurar`, salvo con `--yes`. Para **ensayar** sin tocar producción, restaura en un volumen de pruebas: `VOLUME_NAME=restore-test ./scripts/restore-db.sh <backup.gz> --yes` y arranca un relé sobre él (`docker run -d -v restore-test:/app/data <imagen>`). Ese ensayo se hizo el 2026-09-30: un backup real se restauró, el relé arrancó con él y sirvió sus eventos.
+
+## Desplegar
+
+`./scripts/deploy.sh` recompila la imagen metiendo en el binario la versión de git (`git describe --tags --always --dirty`) —aparece en el `version` de NIP-11, en el panel y en la página de presentación— y recrea el relé; añade `--caddy` tras editar el Caddyfile o el `.env`. Caddy envía además `Strict-Transport-Security` (solo HTTPS, un año).
+
 ## Operación
 
 - **Backups**: `./scripts/backup-db.sh` hace una copia consistente con `sqlite3 .backup`

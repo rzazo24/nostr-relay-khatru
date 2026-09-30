@@ -124,6 +124,9 @@ function render(d) {
 
   renderChart(d.activity.minutes)
 
+  const maxDay = Math.max(1, ...d.events.perDay.map((x) => x.count))
+  $('growth').replaceChildren(...(d.events.perDay.length ? d.events.perDay.map((x) => el('div', { class: 'row' }, el('span', { text: x.day }), el('div', { class: 'bar' }, el('i', { width: `${Math.round((x.count / maxDay) * 100)}%` })), el('span', { text: fmt(x.count) }))) : [el('span', { class: 'muted', text: 'Sin eventos en los últimos 14 días.' })]))
+
   const max = Math.max(1, ...d.events.byKind.map((k) => k.count))
   $('kinds').replaceChildren(...d.events.byKind.map((k) =>
     el('div', { class: 'row' }, el('span', { text: kindName(k.kind) }), el('div', { class: 'bar' }, el('i', { width: `${Math.round((k.count / max) * 100)}%` })), el('span', { text: fmt(k.count) }))))
@@ -162,7 +165,7 @@ function render(d) {
   const list = (a) => (a && a.length ? a.join(', ') : 'ninguno')
   const c = d.config
   fillKv($('config'), [
-    ['NIPs', (c.nips || []).join(', ')], ['Contenido máx.', `${fmt(c.maxContentLength)} caracteres`], ['Mensaje máx.', bytes(c.maxMessageBytes)], ['Tags por evento', fmt(c.maxEventTags)],
+    ['NIPs', (c.nips || []).join(', ')], ['Retención', c.retentionDays ? `${c.retentionDays} días` : 'sin límite'], ['Contenido máx.', `${fmt(c.maxContentLength)} caracteres`], ['Mensaje máx.', bytes(c.maxMessageBytes)], ['Tags por evento', fmt(c.maxEventTags)],
     ['Eventos por consulta', fmt(c.maxLimit)], ['Sync NIP-77 máx.', fmt(c.maxNegentropyEvents)], ['Fecha futura máx.', `${Math.round(c.maxFutureSkewSec / 60)} min`],
     ['Prueba de trabajo', c.minPoW ? `${c.minPoW} bits` : 'no'], ['Auth obligatoria', c.authRequired ? 'sí' : 'no'], ['Tipos privados', list(c.privateKinds)],
     ['Eventos/min por IP', `${c.eventsPerMinute} (ráfaga ${c.eventsBurst})`], ['Consultas/min por IP', `${c.reqsPerMinute} (ráfaga ${c.reqsBurst})`], ['Conexiones/min por IP', `${c.connsPerMinute} (ráfaga ${c.connsBurst})`],

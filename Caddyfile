@@ -7,6 +7,8 @@
 		Referrer-Policy no-referrer
 		# la misma URL ("/") devuelve cosas distintas según Accept (página, NIP-11, WebSocket)
 		+Vary Accept
+		# HTTPS siempre: los navegadores que ya han visitado este dominio no volverán a intentar HTTP
+		Strict-Transport-Security "max-age=31536000"
 	}
 
 	# Archivos estáticos: icono del relé (RELAY_ICON=/icon.png) y recursos de la página

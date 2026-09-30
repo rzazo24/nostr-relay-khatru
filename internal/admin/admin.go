@@ -365,6 +365,11 @@ type recentEvent struct {
 	Mine      bool   `json:"mine"`
 }
 
+type dayCount struct {
+	Day   string `json:"day"` // AAAA-MM-DD (UTC)
+	Count int    `json:"count"`
+}
+
 type eventStats struct {
 	Total   int           `json:"total"`
 	PubKeys int           `json:"pubkeys"`
@@ -372,6 +377,7 @@ type eventStats struct {
 	Oldest  int64         `json:"oldest"`
 	Newest  int64         `json:"newest"`
 	Last24h int           `json:"last24h"`
+	PerDay  []dayCount    `json:"perDay"`
 	Recent  []recentEvent `json:"recent"`
 }
 
@@ -387,7 +393,7 @@ func (p *Panel) eventStats(ctx context.Context, now time.Time) (*eventStats, err
 	}
 	p.mu.Unlock()
 
-	st := &eventStats{ByKind: []kindCount{}, Recent: []recentEvent{}}
+	st := &eventStats{ByKind: []kindCount{}, Recent: []recentEvent{}, PerDay: []dayCount{}}
 	row := p.db.QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT pubkey), COALESCE(MIN(created_at),0), COALESCE(MAX(created_at),0) FROM event`)
 	if err := row.Scan(&st.Total, &st.PubKeys, &st.Oldest, &st.Newest); err != nil {
 		return nil, err
@@ -395,6 +401,21 @@ func (p *Panel) eventStats(ctx context.Context, now time.Time) (*eventStats, err
 	if err := p.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event WHERE created_at >= ?`, now.Add(-24*time.Hour).Unix()).Scan(&st.Last24h); err != nil {
 		return nil, err
 	}
+	// Eventos guardados por día de creación (UTC), los últimos 14: sirve para ver el ritmo de crecimiento.
+	drows, err := p.db.QueryContext(ctx, `SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') AS d, COUNT(*) FROM event WHERE created_at >= ? GROUP BY d ORDER BY d`, now.Add(-14*24*time.Hour).Unix())
+	if err != nil {
+		return nil, err
+	}
+	for drows.Next() {
+		var d dayCount
+		if err := drows.Scan(&d.Day, &d.Count); err != nil {
+			drows.Close()
+			return nil, err
+		}
+		st.PerDay = append(st.PerDay, d)
+	}
+	drows.Close()
+
 	rows, err := p.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM event GROUP BY kind ORDER BY COUNT(*) DESC, kind LIMIT 30`)
 	if err != nil {
 		return nil, err

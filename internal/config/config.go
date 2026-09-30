@@ -37,6 +37,10 @@ type Config struct {
 	// Tope de eventos que se ofrecen a una sesión de sincronización NIP-77.
 	MaxNegentropyEvents int
 
+	// Retención: los eventos regulares (notas, reacciones, mensajes...) más viejos que estos días se
+	// borran; perfiles, listas y lo del dueño se conservan. 0 = se guarda todo para siempre.
+	RetentionDays int
+
 	// NIP-13: dificultad mínima de prueba de trabajo (bits a cero del id). 0 = desactivado.
 	MinPoW int
 
@@ -101,6 +105,14 @@ func Load(get func(string) string) (Config, error) {
 			}
 			*f.dst = n
 		}
+	}
+
+	if v := strings.TrimSpace(get("RELAY_RETENTION_DAYS")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 36500 {
+			return c, fmt.Errorf("RELAY_RETENTION_DAYS: %q no es un entero entre 0 y 36500 (0 = guardar todo)", v)
+		}
+		c.RetentionDays = n
 	}
 
 	if v := strings.TrimSpace(get("RELAY_MIN_POW")); v != "" {

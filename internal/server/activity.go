@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rzazo24/nostr-relay-khatru/internal/admin"
+	"github.com/rzazo24/nostr-relay-khatru/internal/retention"
 )
 
 // LogOutput es dónde escribe el registro de actividad (docker compose logs lo recoge
@@ -205,4 +206,17 @@ func (a *activityLog) Admin(action, target string) {
 		return
 	}
 	fmt.Fprintf(a.out, "admin action=%s target=%s\n", action, target)
+}
+
+// Retention deja constancia de una pasada de retención, solo si borró algo o falló.
+func (a *activityLog) Retention(res retention.Result, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		fmt.Fprintf(a.out, "retention error=%q deleted=%d\n", err.Error(), res.Deleted)
+		return
+	}
+	if res.Deleted > 0 {
+		fmt.Fprintf(a.out, "retention deleted=%d scanned=%d\n", res.Deleted, res.Scanned)
+	}
 }

@@ -8,7 +8,11 @@ x-logging: &default-logging
 # la red interna. Caddy termina TLS (Let's Encrypt) para RELAY_DOMAIN (ver .env).
 services:
   relay:
-    build: .
+    build:
+      context: .
+      args:
+        # ./scripts/deploy.sh lo rellena con `git describe`; sin él queda "dev"
+        VERSION: ${VERSION:-dev}
     container_name: nostr-relay-khatru
     restart: unless-stopped
     logging: *default-logging

@@ -46,6 +46,11 @@
         </p>
       </section>
 
+      <section class="panel">
+        <h2>Crecimiento · eventos guardados por día <button type="button" class="q" data-help="h-growth" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <div id="growth"></div>
+      </section>
+
       <div class="cols">
         <section class="panel">
           <h2>Eventos por tipo <button type="button" class="q" data-help="h-kinds" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
@@ -146,6 +151,7 @@
       <nav class="toc" aria-label="Índice">
         <a href="#h-cards">Números de arriba</a>
         <a href="#h-activity">Actividad</a>
+        <a href="#h-growth">Crecimiento</a>
         <a href="#h-kinds">Eventos por tipo</a>
         <a href="#h-rejections">Rechazos</a>
         <a href="#h-recent">Eventos recientes</a>
@@ -172,6 +178,12 @@
         <p>Una barra por minuto. Colores: <b>turquesa</b> = eventos guardados, <b>azul</b> = eventos efímeros, <b>rojo</b> = rechazados. Pasa el ratón por encima de una barra para ver las cifras exactas de ese minuto (incluye también las autenticaciones).</p>
         <p><b>Evento efímero</b>: un mensaje que el relé reenvía a quien esté escuchando pero no guarda. Sirve para cosas momentáneas (por ejemplo chats en vivo). No ocupa disco.</p>
         <p>El histórico vive solo en memoria: si el relé se reinicia, la gráfica empieza de cero.</p>
+      </section>
+
+      <section id="h-growth">
+        <h3>Crecimiento · eventos guardados por día</h3>
+        <p>Cuántos de los eventos que hay guardados se crearon cada día (fecha UTC) durante los últimos 14 días. Sirve para ver <b>a qué ritmo crece el relé</b> y prever cuánto disco va a ocupar.</p>
+        <p>Ojo: cuenta por la fecha del evento, no por cuándo llegó al relé. Y si activas la <b>retención</b> (ver «Configuración»), los días antiguos irán vaciándose a medida que se borran eventos viejos.</p>
       </section>
 
       <section id="h-kinds">
@@ -241,6 +253,7 @@
         <p>Son los límites con los que trabaja el relé ahora. Aquí no se cambian: se modifican en el archivo de configuración del servidor y se reinicia el relé.</p>
         <dl>
           <dt>NIPs</dt><dd>Las especificaciones de Nostr que el relé soporta: 1 (protocolo básico), 9 (borrado), 11 (información del relé), 40 (caducidad), 42 (autenticación), 45 (conteo), 70 (eventos protegidos), 77 (sincronización) y 86 (gestión), más el 13 (prueba de trabajo) si está activada.</dd>
+          <dt>Retención</dt><dd>Cuántos días se conservan los eventos normales (notas, reacciones, mensajes privados, borrados…). Pasado ese plazo se borran solos, una comprobación cada hora. <b>No se borran</b> los perfiles, las listas de contactos y de relés (son el estado actual de cada cuenta) ni nada de lo publicado por ti como dueño. «sin límite» = se guarda todo para siempre (la base de datos irá creciendo).</dd>
           <dt>Contenido máx.</dt><dd>Caracteres máximos del texto de un evento.</dd>
           <dt>Mensaje máx.</dt><dd>Tamaño máximo de un mensaje completo que envía un cliente (texto más etiquetas y firma).</dd>
           <dt>Tags por evento</dt><dd>Cuántas etiquetas puede llevar un evento.</dd>

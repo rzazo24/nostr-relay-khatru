@@ -152,6 +152,26 @@ To make the description bilingual, write it as `English text | Texto en español
 
 Clients show the NIP-11 `icon`. Put a square image (PNG/JPG/WebP, ~512×512, small) in `static/`, set `RELAY_ICON=/icon.png` and Caddy serves it at `https://<RELAY_DOMAIN>/icon.png` (the `static/icon.png` and `static/icon.svg` here are the ones used by the public instance). Prefer PNG: many native apps can't render SVG. NIP-86's `changerelayicon` overrides it live.
 
+## Data retention
+
+An open relay accumulates events forever unless you tell it otherwise. `RELAY_RETENTION_DAYS=N` makes a background pass (an hour after start, then hourly, at most 20 000 deletions per pass) delete **regular** events older than `N` days: notes, reactions, reposts, deletion requests, direct messages… It never deletes what describes an account's *current state* (profiles, contact lists, relay lists and other replaceable/addressable kinds — one per account and kind) nor anything published by the owner (`RELAY_PUBKEY`). `0` (the default) keeps everything. Each pass that deletes something logs `retention deleted=… scanned=…`. The control panel shows the setting and a *events per day* chart to judge the growth rate. The production instance uses 180 days.
+
+## Restoring a backup
+
+Backups (`scripts/backup-db.sh`, nightly in cron) are consistent SQLite copies. To restore one:
+
+```bash
+docker compose stop relay
+./scripts/restore-db.sh ~/backups/nostr-relay-khatru/nostr-relay-khatru-<timestamp>.sqlite.gz
+docker compose up -d relay
+```
+
+The script checks that the backup decompresses and passes SQLite's `integrity_check`, refuses to run while a container uses the volume, saves the *current* database as `pre-restore-<timestamp>.sqlite.gz` (in case you picked the wrong backup), then swaps the file in and removes the stale `-wal`/`-shm`. It asks you to type `restaurar` unless you pass `--yes`. To **rehearse** without touching production, restore into a scratch volume: `VOLUME_NAME=restore-test ./scripts/restore-db.sh <backup.gz> --yes`, then boot a relay on it (`docker run -d -v restore-test:/app/data <image>`). That rehearsal was done on 2026-09-30: a real backup restored, the relay booted on it and served its events.
+
+## Deploying
+
+`./scripts/deploy.sh` rebuilds the image stamping the git version (`git describe --tags --always --dirty`) into the binary — it shows in NIP-11 `version`, the control panel and the landing page — and recreates the relay; add `--caddy` after editing the Caddyfile or `.env`. Caddy also sends `Strict-Transport-Security` (HTTPS only, one year).
+
 ## Operations
 
 - **Backups**: `./scripts/backup-db.sh` makes a consistent copy with `sqlite3 .backup`

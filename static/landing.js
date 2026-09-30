@@ -95,6 +95,14 @@ function safeImageUrl(value) {
   } catch { return null }
 }
 
+// La descripción de NIP-11 es un solo texto. Para que sea bilingüe en TODOS los clientes se
+// escribe "texto en inglés | texto en español": los clientes muestran ambos, y esta página
+// enseña solo el del idioma elegido. Si no tiene ese formato, se muestra tal cual.
+function pickLanguage(text) {
+  const parts = String(text).split(' | ')
+  return parts.length === 2 ? parts[lang === 'es' ? 1 : 0].trim() : text
+}
+
 function fmt(n) { return Number(n).toLocaleString(lang) }
 
 function addRow(dl, label, value) {
@@ -128,7 +136,7 @@ function render() {
 
   document.title = info.name || 'Nostr relay'
   $('name').textContent = info.name || location.host
-  $('description').textContent = info.description || ''
+  $('description').textContent = pickLanguage(info.description || '')
   const icon = safeImageUrl(info.icon)
   if (icon) $('icon').src = icon
 

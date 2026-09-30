@@ -100,6 +100,9 @@ authenticates right after connecting, the challenge arrives asynchronously — `
 
 ## Deployment
 
+**Bilingual description convention**: `RELAY_DESCRIPTION="English | Español"` (split on " | " in `landing.js`'s `pickLanguage`; any
+other clients simply show both). The production `.env` uses it. Editing `.env` needs `docker compose up -d --force-recreate relay`.
+
 **Landing page** (`static/index.html` + `landing.css` + `landing.js`): the Caddyfile serves it for `GET`/`HEAD` of `/` that
 are NOT NIP-11 (`Accept: application/nostr+json`), NOT WebSocket (`Upgrade`/`Connection`) — NIP-86 `POST`s also skip it
 (`method GET HEAD`). Because that matcher doesn't require `Accept: text/html`, plain `curl`, browsers and uptime monitors all

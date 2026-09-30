@@ -97,3 +97,12 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .summary { margin-top:10px; }
 
 .kw { font-weight:700; } .kw.saved { color:var(--accent); } .kw.ephemeral { color:var(--blue); } .kw.rejected { color:#ff6b81; }
+
+.searchform { flex-direction:row; flex-wrap:wrap; align-items:center; } .searchform input:first-child { flex:1 1 320px; } .searchform .kindin { width:10rem; flex:0 0 auto; }
+.keycard { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:12px 0; background:rgba(255,255,255,.015); }
+.keycard .top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; }
+.keycard .name { font-weight:700; } .keycard .kinds { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0; }
+.badge.warn { border-color:var(--red); color:#ff8a9b; }
+.resultinfo { margin:10px 0 4px; color:var(--muted); font-size:.9rem; }
+button.chipbtn { padding:1px 8px; border-radius:999px; font-size:.8rem; }
+td .pk { cursor:pointer; }

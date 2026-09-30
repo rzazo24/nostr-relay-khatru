@@ -1120,3 +1120,160 @@ func TestHistory_HoldsNoContentOrKeys(t *testing.T) {
 		t.Fatalf("el histórico solo debe llevar contadores: %s", raw)
 	}
 }
+
+// ---------- búsqueda en el panel ----------
+
+func searchCall(t *testing.T, ts *httptest.Server, cookie, query string) (int, map[string]any) {
+	t.Helper()
+	res, body := adminCall(t, ts, "GET", "/admin/api/search?"+query, "", cookie)
+	return res.StatusCode, body
+}
+
+func searchIDs(body map[string]any) []string {
+	var out []string
+	for _, e := range body["events"].([]any) {
+		out = append(out, e.(map[string]any)["id"].(string))
+	}
+	return out
+}
+
+func TestAdminSearch_ByKeyIdKindPrefixAndText(t *testing.T) {
+	owner, ana, bea := newKeys(), newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+
+	profile := ana.event(0, `{"name":"ana","display_name":"Ana Pérez"}`, nil)
+	note1 := ana.event(1, "Hola mundo, 100% real", nil)
+	note2 := bea.event(1, "otra nota con HOLA dentro", nil)
+	react := bea.event(7, "+", nil)
+	dm := ana.event(4, "hola en privado", nostr.Tags{{"p", bea.pk}})
+	for _, ev := range []nostr.Event{profile, note1, note2, react, dm} {
+		if err := publish(r, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if code, _ := searchCall(t, ts, "", "q=x"); code != 401 {
+		t.Fatal("la búsqueda exige sesión")
+	}
+
+	// por clave (hex y npub): sus 3 eventos, y el resumen de la clave
+	npub, _ := nip19.EncodePublicKey(ana.pk)
+	for _, q := range []string{ana.pk, npub} {
+		code, body := searchCall(t, ts, cookie, "q="+q)
+		if code != 200 || body["total"] != float64(3) {
+			t.Fatalf("eventos de ana (%s…): %d %v", q[:10], code, body["total"])
+		}
+		key := body["key"].(map[string]any)
+		if key["events"] != float64(3) || key["name"] != "Ana Pérez" || key["npub"] != npub || key["banned"] != false {
+			t.Fatalf("resumen de la clave: %v", key)
+		}
+	}
+	// por id (hex y note1)
+	note, _ := nip19.EncodeNote(note2.ID)
+	for _, q := range []string{note2.ID, note} {
+		code, body := searchCall(t, ts, cookie, "q="+q)
+		if code != 200 || body["total"] != float64(1) || searchIDs(body)[0] != note2.ID {
+			t.Fatalf("por id: %d %v", code, body)
+		}
+	}
+	// por el principio de una clave o de un id
+	if _, body := searchCall(t, ts, cookie, "q="+bea.pk[:10]); body["total"] != float64(2) {
+		t.Fatalf("por prefijo de clave: %v", body["total"])
+	}
+	if _, body := searchCall(t, ts, cookie, "q="+note1.ID[:8]); body["total"] != float64(1) {
+		t.Fatalf("por prefijo de id: %v", body["total"])
+	}
+	// por tipo: como número y con el filtro
+	if _, body := searchCall(t, ts, cookie, "q=7"); body["total"] != float64(1) {
+		t.Fatalf("q=7 es el tipo 7: %v", body["total"])
+	}
+	if _, body := searchCall(t, ts, cookie, "q="+bea.pk+"&kind=1"); body["total"] != float64(1) {
+		t.Fatalf("clave + filtro de tipo: %v", body["total"])
+	}
+	// texto: sin distinguir mayúsculas; los comodines se buscan tal cual; lo privado no se busca
+	if _, body := searchCall(t, ts, cookie, "q=hola"); body["total"] != float64(2) {
+		t.Fatalf("texto 'hola' (2 notas públicas; el mensaje privado no cuenta): %v", body["total"])
+	}
+	if _, body := searchCall(t, ts, cookie, "q=100%25"); body["total"] != float64(1) {
+		t.Fatalf("el %% se busca literalmente: %v", body["total"])
+	}
+	if _, body := searchCall(t, ts, cookie, "q="+"%25"); body["total"] != float64(1) {
+		t.Fatalf("un %% suelto solo encuentra el texto que lo contiene, no todo: %v", body["total"])
+	}
+	// el mensaje privado aparece buscando por su clave, pero sin contenido
+	_, body := searchCall(t, ts, cookie, "q="+ana.pk+"&kind=4")
+	ev := body["events"].([]any)[0].(map[string]any)
+	if ev["kind"] != float64(4) || ev["content"] != nil && ev["content"] != "" {
+		t.Fatalf("un mensaje privado no enseña su contenido: %v", ev)
+	}
+	// sin consulta: todo, y los botones de acción saben qué es tuyo
+	if _, body := searchCall(t, ts, cookie, ""); body["total"] != float64(5) {
+		t.Fatalf("sin consulta = todos: %v", body["total"])
+	}
+	// validación
+	if code, _ := searchCall(t, ts, cookie, "q="+strings.Repeat("a", 300)); code != 400 {
+		t.Fatal("una consulta demasiado larga se rechaza")
+	}
+	if code, _ := searchCall(t, ts, cookie, "q=npub1noesvalida"); code != 400 {
+		t.Fatal("un npub inválido se rechaza")
+	}
+	if code, _ := searchCall(t, ts, cookie, "kind=99999"); code != 400 {
+		t.Fatal("un kind fuera de rango se rechaza")
+	}
+	if code, _ := searchCall(t, ts, cookie, "next=basura"); code != 400 {
+		t.Fatal("un cursor inválido se rechaza")
+	}
+}
+
+func TestAdminSearch_PaginatesAndShowsModerationState(t *testing.T) {
+	owner, spammer := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+	for i := 0; i < 120; i++ {
+		ev := nostr.Event{Kind: 1, Content: fmt.Sprintf("spam %d", i), CreatedAt: nostr.Now() - nostr.Timestamp(i/3), PubKey: spammer.pk} // varios con el mismo created_at
+		ev.Sign(spammer.sk)
+		if err := publish(r, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[string]bool{}
+	next := ""
+	pages := 0
+	for {
+		code, body := searchCall(t, ts, cookie, "q="+spammer.pk+"&next="+next)
+		if code != 200 {
+			t.Fatalf("página %d: %d %v", pages, code, body)
+		}
+		for _, id := range searchIDs(body) {
+			if seen[id] {
+				t.Fatalf("evento repetido entre páginas: %s", id)
+			}
+			seen[id] = true
+		}
+		pages++
+		if body["total"] != float64(120) {
+			t.Fatalf("total: %v", body["total"])
+		}
+		n, _ := body["next"].(string)
+		if n == "" {
+			break
+		}
+		next = n
+	}
+	if len(seen) != 120 || pages != 3 {
+		t.Fatalf("120 eventos en 3 páginas de 50/50/20: %d eventos, %d páginas", len(seen), pages)
+	}
+
+	adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": spammer.pk, "reason": "spam"}, nil)
+	_, body := searchCall(t, ts, cookie, "q="+spammer.pk)
+	key := body["key"].(map[string]any)
+	if key["banned"] != true {
+		t.Fatalf("el resumen debe reflejar que está baneada: %v", key)
+	}
+	if _, second := searchCall(t, ts, cookie, "q="+spammer.pk+"&next="+body["next"].(string)); second["key"] != nil {
+		t.Fatal("el resumen de la clave solo va en la primera página")
+	}
+}

@@ -136,6 +136,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/api/session", p.requireSession(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, map[string]any{"ok": true}) }))
 	mux.HandleFunc("GET /admin/api/stats", p.requireSession(p.stats))
 	mux.HandleFunc("GET /admin/api/history", p.requireSession(p.history))
+	mux.HandleFunc("GET /admin/api/search", p.requireSession(p.search))
 	p.mountModeration(mux)
 }
 

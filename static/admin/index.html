@@ -78,6 +78,16 @@
         <ul id="recent" class="recent"></ul>
       </section>
 
+      <section class="panel" id="search-panel">
+        <h2>Buscar <button type="button" class="q" data-help="h-search" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <form id="f-search" class="form searchform" autocomplete="off">
+          <input name="q" maxlength="200" placeholder="npub…, clave o id (entero o sus primeros caracteres), número de tipo o texto" aria-label="Qué buscar">
+          <input name="kind" type="number" min="0" max="65535" placeholder="tipo (opcional)" aria-label="Filtrar por tipo de evento" class="kindin">
+          <div class="btns"><button type="submit" class="primary">Buscar</button><button type="button" id="search-clear">Limpiar</button></div>
+        </form>
+        <div id="search-out" aria-live="polite"></div>
+      </section>
+
       <section class="panel" id="mod">
         <h2>Moderación <button type="button" class="q" data-help="h-moderation" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <p class="muted small">Los cambios se aplican al momento y se guardan (sobreviven a reinicios). Tú, como dueño, nunca quedas bloqueado por estas listas.</p>
@@ -164,6 +174,7 @@
         <a href="#h-kinds">Eventos por tipo</a>
         <a href="#h-rejections">Rechazos</a>
         <a href="#h-recent">Eventos recientes</a>
+        <a href="#h-search">Buscar</a>
         <a href="#h-moderation">Moderación</a>
         <a href="#h-config">Configuración</a>
         <a href="#h-session">Cabecera y sesión</a>
@@ -258,6 +269,21 @@
           <li>Pulsa la clave (en turquesa) para <b>copiarla entera</b>.</li>
           <li><b>Vetar evento</b> borra ese evento y no deja que vuelva a publicarse. <b>Banear clave</b> impide que esa clave publique; la página pregunta si además quieres borrar todo lo suyo. Ambas se pueden deshacer desde «Moderación».</li>
         </ul>
+      </section>
+
+      <section id="h-search">
+        <h3>Buscar</h3>
+        <p>Sirve para encontrar eventos o ver qué ha hecho una clave. Escribe lo que tengas y el panel adivina qué es:</p>
+        <dl>
+          <dt>Un <code>npub…</code> o una clave de 64 caracteres</dt><dd>Los eventos de esa cuenta, más un <b>resumen de la clave</b>: cuántos eventos tiene guardados, desde cuándo, de qué tipos, el nombre de su perfil (si lo ha publicado) y si está baneada o en la lista blanca.</dd>
+          <dt>Un identificador de evento (<code>note1…</code>, <code>nevent1…</code> o 64 caracteres)</dt><dd>Ese evento concreto.</dd>
+          <dt>Los primeros caracteres (al menos 6) de una clave o de un id</dt><dd>Todo lo que empiece así. Útil con las claves abreviadas de 8 caracteres que ves en «Rechazos»: pulsa una y se busca sola.</dd>
+          <dt>Un número pequeño</dt><dd>Los eventos de ese <b>tipo</b> (por ejemplo <code>7</code> son las reacciones). También puedes usar la casilla «tipo» junto a cualquier otra búsqueda para acotarla.</dd>
+          <dt>Cualquier otro texto</dt><dd>Los eventos públicos cuyo contenido lo contiene (sin distinguir mayúsculas). Los <b>mensajes privados no se buscan</b> y nunca muestran su contenido.</dd>
+          <dt>Nada (vacío)</dt><dd>Todos los eventos, del más nuevo al más viejo.</dd>
+        </dl>
+        <p>Los resultados salen de 50 en 50 (botón «Cargar más») con el total arriba (se deja de contar en 10 000). En cada evento tienes <b>Vetar evento</b> y <b>Banear clave</b>, y pulsar una clave lanza la búsqueda de todo lo suyo. Cuando ves una clave, el resumen también permite banear, o quitar el baneo si ya lo está.</p>
+        <p>La búsqueda solo lee: no cambia nada hasta que pulses una acción de moderación.</p>
       </section>
 
       <section id="h-moderation">

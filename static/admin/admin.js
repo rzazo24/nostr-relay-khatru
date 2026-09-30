@@ -85,6 +85,8 @@ async function login() {
 async function logout() {
   stop()
   modState = null
+  searchState = null
+  $('search-out').replaceChildren()
   await fetch('/admin/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
   show('login')
 }
@@ -139,30 +141,9 @@ function render(d) {
   const tbody = $('rejections').querySelector('tbody')
   tbody.replaceChildren(...d.activity.rejections.map((r) => el('tr', {},
     el('td', { text: clock(r.t) }), el('td', { text: r.what === 'event' ? 'evento' : 'consulta' }),
-    el('td', { text: r.kind >= 0 ? String(r.kind) : '—' }), el('td', { text: r.pubkey || '—' }), el('td', { class: 'reason', text: r.reason }))))
+    el('td', { text: r.kind >= 0 ? String(r.kind) : '—' }), el('td', {}, r.pubkey ? searchButton(r.pubkey) : '—'), el('td', { class: 'reason', text: r.reason }))))
 
-  $('recent').replaceChildren(...d.events.recent.map((e) => {
-    const pk = el('button', { class: 'pk', type: 'button', title: 'Copiar clave completa', text: e.pubkey.slice(0, 12) + '…' })
-    pk.addEventListener('click', () => navigator.clipboard.writeText(e.pubkey).then(() => { pk.textContent = 'copiada ✓'; setTimeout(() => { pk.textContent = e.pubkey.slice(0, 12) + '…' }, 1200) }).catch(() => {}))
-    const meta = el('div', { class: 'meta' }, el('span', { text: ago(e.createdAt, now) }), el('span', { text: kindName(e.kind) }), pk, e.mine ? el('span', { class: 'badge', text: 'tuyo' }) : null)
-    if (!e.mine) {
-      const acts = el('span', { class: 'actions2' })
-      const ban = el('button', { type: 'button', class: 'act danger', text: 'Banear clave', title: 'Banear la clave de este evento' })
-      ban.addEventListener('click', () => {
-        if (!confirm(`¿Banear la clave ${e.pubkey.slice(0, 12)}…?\nDejará de poder publicar. Puedes deshacerlo desde «Claves baneadas».`)) return
-        const del = confirm('¿Borrar también todos sus eventos guardados?\n(Aceptar = sí, Cancelar = no, solo banear)')
-        act('ban-pubkey', { pubkey: e.pubkey, reason: 'desde eventos recientes', deleteEvents: del }, (r) => (r.deleted ? `Clave baneada y ${r.deleted} evento(s) borrados` : 'Clave baneada'))
-      })
-      const veto = el('button', { type: 'button', class: 'act', text: 'Vetar evento', title: 'Vetar y borrar este evento' })
-      veto.addEventListener('click', () => {
-        if (!confirm('¿Vetar y borrar este evento? No podrá volver a publicarse.')) return
-        act('ban-event', { id: e.id, reason: 'desde eventos recientes' }, () => 'Evento vetado y borrado')
-      })
-      acts.append(veto, ban)
-      meta.append(acts)
-    }
-    return el('li', {}, meta, e.content ? el('div', { class: 'body', text: e.content }) : null)
-  }))
+  $('recent').replaceChildren(...d.events.recent.map((e) => eventItem(e, now, { source: 'eventos recientes' })))
 
   const list = (a) => (a && a.length ? a.join(', ') : 'ninguno')
   const c = d.config
@@ -172,6 +153,38 @@ function render(d) {
     ['Prueba de trabajo', c.minPoW ? `${c.minPoW} bits` : 'no'], ['Auth obligatoria', c.authRequired ? 'sí' : 'no'], ['Tipos privados', list(c.privateKinds)],
     ['Eventos/min por IP', `${c.eventsPerMinute} (ráfaga ${c.eventsBurst})`], ['Consultas/min por IP', `${c.reqsPerMinute} (ráfaga ${c.reqsBurst})`], ['Conexiones/min por IP', `${c.connsPerMinute} (ráfaga ${c.connsBurst})`],
   ])
+}
+
+// Fila de un evento (en «Eventos recientes» y en los resultados de la búsqueda). Las acciones de
+// moderación no aparecen en los eventos del dueño.
+function eventItem(e, now, { source, searchKey } = {}) {
+  const pk = el('button', { class: 'pk', type: 'button', title: searchKey ? 'Buscar todo lo de esta clave' : 'Copiar clave completa', text: e.pubkey.slice(0, 12) + '…' })
+  if (searchKey) pk.addEventListener('click', () => searchFor(e.pubkey, ''))
+  else pk.addEventListener('click', () => navigator.clipboard.writeText(e.pubkey).then(() => { pk.textContent = 'copiada ✓'; setTimeout(() => { pk.textContent = e.pubkey.slice(0, 12) + '…' }, 1200) }).catch(() => {}))
+  const meta = el('div', { class: 'meta' }, el('span', { text: ago(e.createdAt, now) }), el('span', { text: kindName(e.kind) }), pk)
+  if (!searchKey) {
+    const more = el('button', { class: 'act', type: 'button', text: 'Sus eventos', title: 'Buscar todo lo que ha publicado esta clave' })
+    more.addEventListener('click', () => { searchFor(e.pubkey, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
+    meta.append(more)
+  }
+  if (e.mine) meta.append(el('span', { class: 'badge', text: 'tuyo' }))
+  else {
+    const acts = el('span', { class: 'actions2' })
+    const ban = el('button', { type: 'button', class: 'act danger', text: 'Banear clave', title: 'Banear la clave de este evento' })
+    ban.addEventListener('click', () => {
+      if (!confirm(`¿Banear la clave ${e.pubkey.slice(0, 12)}…?\nDejará de poder publicar. Puedes deshacerlo desde «Claves baneadas».`)) return
+      const del = confirm('¿Borrar también todos sus eventos guardados?\n(Aceptar = sí, Cancelar = no, solo banear)')
+      act('ban-pubkey', { pubkey: e.pubkey, reason: `desde ${source || 'la búsqueda'}`, deleteEvents: del }, (r) => (r.deleted ? `Clave baneada y ${r.deleted} evento(s) borrados` : 'Clave baneada'))
+    })
+    const veto = el('button', { type: 'button', class: 'act', text: 'Vetar evento', title: 'Vetar y borrar este evento' })
+    veto.addEventListener('click', () => {
+      if (!confirm('¿Vetar y borrar este evento? No podrá volver a publicarse.')) return
+      act('ban-event', { id: e.id, reason: `desde ${source || 'la búsqueda'}` }, () => 'Evento vetado y borrado')
+    })
+    acts.append(veto, ban)
+    meta.append(acts)
+  }
+  return el('li', {}, meta, e.content ? el('div', { class: 'body', text: e.content }) : null)
 }
 
 function fillKv(dl, rows) {
@@ -277,7 +290,7 @@ async function act(path, body, okMsg, opts) {
   try {
     const r = await api(path, body)
     toast(typeof okMsg === 'function' ? okMsg(r) : okMsg, false)
-    await Promise.all([load().catch(() => {}), loadModeration(!!(opts && opts.forceInfo))])
+    await Promise.all([load().catch(() => {}), loadModeration(!!(opts && opts.forceInfo)), refreshSearch()])
     return true
   } catch (err) {
     toast(err.message || String(err), true)
@@ -376,6 +389,103 @@ document.querySelectorAll('.tabs [data-range]').forEach((b) => b.addEventListene
   renderActivity()
   loadHistory().catch((e) => { $('updated').textContent = `Error al cargar el histórico: ${e.message}` })
 }))
+
+// ---------- búsqueda ----------
+
+let searchState = null // { q, kind, next } de la búsqueda activa (null = ninguna)
+
+function searchButton(text) {
+  const b = el('button', { class: 'pk', type: 'button', title: 'Buscar eventos de esta clave', text })
+  b.addEventListener('click', () => { searchFor(text, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
+  return b
+}
+
+async function searchFor(q, kind) {
+  $('f-search').elements.q.value = q
+  $('f-search').elements.kind.value = kind
+  await runSearch({ q, kind }, false)
+}
+
+async function runSearch(st, append) {
+  const out = $('search-out')
+  const params = new URLSearchParams({ q: st.q || '' })
+  if (st.kind !== '' && st.kind != null) params.set('kind', String(st.kind))
+  if (append && st.next) params.set('next', st.next)
+  let res
+  try {
+    res = await fetch(`/admin/api/search?${params}`, { credentials: 'same-origin', cache: 'no-store' })
+  } catch (err) { toast(`No se pudo buscar: ${err.message}`, true); return }
+  if (res.status === 401) { stop(); show('login'); return }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) { toast(data.error || `error ${res.status}`, true); return }
+  searchState = { q: st.q, kind: st.kind, next: data.next || '' }
+  const now = Math.floor(Date.now() / 1000)
+  if (!append) out.replaceChildren()
+
+  if (!append) {
+    out.append(el('p', { class: 'resultinfo', text: `${data.totalExact ? fmt(data.total) : `más de ${fmt(data.total)}`} resultado(s): ${data.what}` }))
+    if (data.key) out.append(keyCard(data.key))
+    out.append(el('ul', { class: 'recent', id: 'search-list' }))
+    if (!data.events.length) out.append(el('p', { class: 'muted', text: 'No hay eventos que coincidan.' }))
+  }
+  const list = $('search-list')
+  data.events.forEach((e) => list.append(eventItem(e, now, { source: 'la búsqueda', searchKey: true })))
+  $('search-more')?.remove()
+  if (data.next) {
+    const more = el('button', { type: 'button', id: 'search-more', text: 'Cargar más' })
+    more.addEventListener('click', () => runSearch(searchState, true))
+    out.append(more)
+  }
+}
+
+// Repite la búsqueda activa (desde la primera página), por ejemplo tras vetar o banear.
+async function refreshSearch() {
+  if (searchState) await runSearch({ q: searchState.q, kind: searchState.kind }, false)
+}
+
+function keyCard(k) {
+  const card = el('div', { class: 'keycard' })
+  const name = el('span', { class: 'name', text: k.name || (k.isOwner ? 'Tú (dueño del relé)' : 'Clave sin perfil guardado') })
+  const top = el('div', { class: 'top' }, name)
+  const badges = el('span', { class: 'actions2' })
+  if (k.isOwner) badges.append(el('span', { class: 'badge', text: 'dueño' }))
+  if (k.banned) badges.append(el('span', { class: 'badge warn', text: 'baneada' }))
+  if (k.allowed) badges.append(el('span', { class: 'badge', text: 'en la lista blanca' }))
+  if (!k.isOwner) {
+    const b = el('button', { type: 'button', class: k.banned ? 'act' : 'act danger', text: k.banned ? 'Quitar baneo' : 'Banear clave' })
+    b.addEventListener('click', () => {
+      if (k.banned) act('unban-pubkey', { pubkey: k.pubkey }, 'Baneo quitado')
+      else {
+        if (!confirm(`¿Banear esta clave?\n${k.npub}`)) return
+        const del = confirm('¿Borrar también todos sus eventos guardados?\n(Aceptar = sí, Cancelar = no, solo banear)')
+        act('ban-pubkey', { pubkey: k.pubkey, reason: 'desde la búsqueda', deleteEvents: del }, (r) => (r.deleted ? `Clave baneada y ${r.deleted} evento(s) borrados` : 'Clave baneada'))
+      }
+    })
+    badges.append(b)
+  }
+  top.append(badges)
+  const npub = el('button', { class: 'pk', type: 'button', title: 'Copiar el npub', text: k.npub })
+  npub.addEventListener('click', () => navigator.clipboard.writeText(k.npub).then(() => { npub.textContent = 'copiado ✓'; setTimeout(() => { npub.textContent = k.npub }, 1200) }).catch(() => {}))
+  const when = k.events ? `${fmt(k.events)} evento(s) guardados · el primero ${hourFmt(k.first)}, el último ${hourFmt(k.last)}` : 'Sin eventos guardados'
+  card.append(top, el('div', { class: 'small' }, npub), el('div', { class: 'muted small', text: when }))
+  if (k.byKind.length) {
+    const kinds = el('div', { class: 'kinds' })
+    k.byKind.forEach((x) => {
+      const c = el('button', { type: 'button', class: 'chipbtn', title: 'Ver solo este tipo', text: `${kindName(x.kind)} · ${fmt(x.count)}` })
+      c.addEventListener('click', () => searchFor(k.pubkey, String(x.kind)))
+      kinds.append(c)
+    })
+    card.append(kinds)
+  }
+  return card
+}
+
+$('f-search').addEventListener('submit', (ev) => {
+  ev.preventDefault()
+  const f = ev.currentTarget
+  runSearch({ q: f.elements.q.value.trim(), kind: f.elements.kind.value.trim() }, false)
+})
+$('search-clear').addEventListener('click', () => { $('f-search').reset(); $('search-out').replaceChildren(); searchState = null })
 
 // ---------- ayuda ----------
 

@@ -113,6 +113,15 @@ CSP (`script-src 'self'; style-src 'self'`): **no inline `style=` attributes or 
 Caddy: `/admin/api/*` → relay, `/admin`, `/admin/admin.js|css` → static with `Cache-Control: no-cache`. Phase 2 (moderation) is below. The browser extension used is nos2x (NIP-07): the page asks it to sign one event per login.
 `/admin/api/session` answers 401 when logged out, so a 401 in the console at page load is expected.
 
+**Search** (`internal/admin/search.go`, `GET /admin/api/search?q=&kind=&next=`): `planSearch` decides what `q` is (npub/nprofile →
+author; note1/nevent1 → id; 64 hex → author OR id (and shows a key summary); 6–63 hex → prefix of pubkey OR id; ≤5 digits → kind;
+otherwise `content LIKE` with `%`/`_`/`\` escaped). **Text search excludes private kinds (4, 13, 14, 1059) in SQL and never
+returns their content** (tested). Pagination is a `created_at:id` cursor (`created_at < ? OR (=? AND id < ?)`), 50 per page; the
+total is `COUNT(*)` over a `LIMIT 10001` subquery (so "más de 10 000"). The key summary comes only with the first page and
+only when the query reduces to one full key. It's a scan with `LIKE` — fine at this scale; revisit (FTS5) if the table gets huge.
+Frontend: `eventItem()` is shared by *recent* and *search* rows; after any moderation action `act()` calls `refreshSearch()` so a
+vetoed event disappears from the results. The 8-char keys in *Rejections* call `searchFor()`.
+
 **Long-term stats** (`internal/stats`): table `activity_hourly(hour, metric, n)` in the same sqlite file (own connection, WAL).
 `activityLog` accumulates per-hour *deltas* (`bumpLocked`/`TakeDeltas`) and `Server.statsLoop` flushes them every minute with an
 **additive** upsert (`n = n + excluded.n`) — never write absolute in-memory totals, a restart mid-hour would overwrite the hour —

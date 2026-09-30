@@ -1,5 +1,15 @@
 :root { --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --red:#e31337; --blue:#60a5fa; }
 * { box-sizing: border-box; }
+
+/* Barras de desplazamiento a juego con el diseño (estándar; el bloque -webkit- es solo para navegadores antiguos) */
+* { scrollbar-width: thin; scrollbar-color: #2b3a50 transparent; }
+@supports not (scrollbar-color: auto) {
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #2b3a50; border-radius: 8px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  *::-webkit-scrollbar-corner { background: transparent; }
+}
 html { color-scheme: dark; }
 body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
 main { max-width:1180px; margin:0 auto; padding:24px 20px 56px; }

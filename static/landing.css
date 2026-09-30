@@ -8,6 +8,16 @@
   --red: #e31337;
 }
 * { box-sizing: border-box; }
+
+/* Barras de desplazamiento a juego con el diseño (estándar; el bloque -webkit- es solo para navegadores antiguos) */
+* { scrollbar-width: thin; scrollbar-color: #2b3a50 transparent; }
+@supports not (scrollbar-color: auto) {
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #2b3a50; border-radius: 8px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  *::-webkit-scrollbar-corner { background: transparent; }
+}
 html { color-scheme: dark; }
 body {
   margin: 0;

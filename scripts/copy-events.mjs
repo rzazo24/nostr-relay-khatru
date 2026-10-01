@@ -40,7 +40,8 @@ function talk(url, messages, done, ms = 30000) {
     const ws = new WS(url), got = []
     const t = setTimeout(() => { ws.close(); reject(new Error(`${url}: tiempo agotado`)) }, ms)
     ws.addEventListener('open', () => messages.forEach((m) => ws.send(JSON.stringify(m))))
-    ws.addEventListener('error', () => { clearTimeout(t); reject(new Error(`${url}: no se pudo conectar`)) })
+    ws.addEventListener('error', (ev) => { clearTimeout(t); reject(new Error(`${url}: no se pudo conectar (${ev.message || ev.error?.message || ev.error?.code || 'sin detalle'})`)) })
+    ws.addEventListener('close', (ev) => { if (ev.code && ev.code !== 1000 && ev.code !== 1005 && !got.length) { clearTimeout(t); reject(new Error(`${url}: conexión cerrada (código ${ev.code}${ev.reason ? ': ' + ev.reason : ''})`)) } })
     ws.addEventListener('message', (ev) => { const d = JSON.parse(String(ev.data)); got.push(d); if (done(d)) { clearTimeout(t); ws.close(); resolve(got) } })
   })
 }

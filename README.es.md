@@ -110,6 +110,7 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 | `RELAY_LISTEN_ADDR` | `:3334` | Dirección en la que escucha |
 | `RELAY_DB_PATH` | `./data/relay.sqlite` | Archivo SQLite |
 | `RELAY_NAME`, `RELAY_DESCRIPTION`, `RELAY_CONTACT` | | Documento NIP-11 |
+| `RELAY_TAGS`, `RELAY_LANGUAGES`, `RELAY_POSTING_POLICY` | | NIP-11 `tags`, `language_tags` (separados por comas) y `posting_policy` (URL): lo que usan los directorios de relés para clasificarlo |
 | `RELAY_PUBKEY` | | Clave pública del dueño (hex): `pubkey` de NIP-11 y la única que puede usar NIP-86 |
 | `RELAY_PUBLIC_URL` | *(se deduce)* | URL pública https, para NIP-42/NIP-98 |
 | `RELAY_ICON` | | Icono del relé para NIP-11: una URL absoluta, o una ruta como `/icon.png` (que Caddy sirve desde `./static`) |

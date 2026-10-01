@@ -87,3 +87,16 @@ func TestLoad_RejectsInvalidValuesNamingTheVariable(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_DirectoryFields(t *testing.T) {
+	c, err := Load(env(map[string]string{"RELAY_TAGS": " general, open ,,", "RELAY_LANGUAGES": "en,es", "RELAY_POSTING_POLICY": " https://x/y "}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Tags) != 2 || c.Tags[0] != "general" || c.Tags[1] != "open" || len(c.Languages) != 2 || c.PostingPolicy != "https://x/y" {
+		t.Fatalf("campos de directorio mal leídos: %+v %+v %q", c.Tags, c.Languages, c.PostingPolicy)
+	}
+	if d, _ := Load(env(nil)); len(d.Tags) != 0 || len(d.Languages) != 0 {
+		t.Fatal("por defecto no hay etiquetas ni idiomas")
+	}
+}

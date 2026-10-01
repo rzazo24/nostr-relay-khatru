@@ -112,6 +112,7 @@ optional except `RELAY_DOMAIN` when using Docker.
 | `RELAY_LISTEN_ADDR` | `:3334` | Address the relay listens on |
 | `RELAY_DB_PATH` | `./data/relay.sqlite` | SQLite file |
 | `RELAY_NAME`, `RELAY_DESCRIPTION`, `RELAY_CONTACT` | | NIP-11 document |
+| `RELAY_TAGS`, `RELAY_LANGUAGES`, `RELAY_POSTING_POLICY` | | NIP-11 `tags`, `language_tags` (comma-separated) and `posting_policy` (URL) — what relay directories use to classify the relay |
 | `RELAY_PUBKEY` | | Owner's public key (hex): NIP-11 `pubkey` and the only one allowed to use NIP-86 |
 | `RELAY_PUBLIC_URL` | *(deduced)* | Public https URL, for NIP-42/NIP-98 |
 | `RELAY_ICON` | | Relay icon for NIP-11: an absolute URL, or a path like `/icon.png` (served by Caddy from `./static`) |

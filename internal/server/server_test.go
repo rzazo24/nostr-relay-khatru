@@ -1299,3 +1299,25 @@ func TestOpenConnectionsNeverGoNegative(t *testing.T) {
 		t.Fatalf("con una conexión abierta debe haber 1, hay %d", n)
 	}
 }
+
+func TestNIP11AdvertisesDirectoryFields(t *testing.T) {
+	_, ts := start(t, map[string]string{"RELAY_CONTACT": "npub1ejemplo", "RELAY_TAGS": "general,open", "RELAY_LANGUAGES": "en,es"})
+	req, _ := http.NewRequest("GET", ts.URL, nil)
+	req.Header.Set("Accept", "application/nostr+json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var doc struct {
+		Contact string   `json:"contact"`
+		Tags    []string `json:"tags"`
+		Langs   []string `json:"language_tags"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Contact != "npub1ejemplo" || len(doc.Tags) != 2 || doc.Tags[1] != "open" || len(doc.Langs) != 2 {
+		t.Fatalf("NIP-11: %+v", doc)
+	}
+}

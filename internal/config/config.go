@@ -18,12 +18,15 @@ type Config struct {
 	DBPath     string
 
 	// Documento NIP-11 (lo que ven los clientes al consultar el relé).
-	Name        string
-	Description string
-	PubKey      string // hex, opcional; también es el dueño que puede usar la API de gestión NIP-86
-	Contact     string // opcional
-	PublicURL   string // URL pública https del relé (para NIP-42/NIP-86); vacío = se deduce de la petición
-	Icon        string // icono del relé (NIP-11): URL absoluta o ruta relativa a la URL pública (p. ej. /icon.png)
+	Name          string
+	Description   string
+	PubKey        string   // hex, opcional; también es el dueño que puede usar la API de gestión NIP-86
+	Contact       string   // opcional
+	Tags          []string // etiquetas NIP-11 (p. ej. general, open), separadas por comas
+	Languages     []string // language_tags NIP-11 (p. ej. en, es)
+	PostingPolicy string   // URL de las normas de uso (opcional)
+	PublicURL     string   // URL pública https del relé (para NIP-42/NIP-86); vacío = se deduce de la petición
+	Icon          string   // icono del relé (NIP-11): URL absoluta o ruta relativa a la URL pública (p. ej. /icon.png)
 
 	// Límites por evento.
 	MaxContentLength int           // caracteres (runas) del content
@@ -66,6 +69,9 @@ func Load(get func(string) string) (Config, error) {
 		Description:         str(get, "RELAY_DESCRIPTION", "A small general-purpose Nostr relay built with khatru"),
 		PubKey:              get("RELAY_PUBKEY"),
 		Contact:             get("RELAY_CONTACT"),
+		Tags:                csv(get("RELAY_TAGS")),
+		Languages:           csv(get("RELAY_LANGUAGES")),
+		PostingPolicy:       strings.TrimSpace(get("RELAY_POSTING_POLICY")),
 		PublicURL:           strings.TrimRight(get("RELAY_PUBLIC_URL"), "/"),
 		Icon:                strings.TrimSpace(get("RELAY_ICON")),
 		PrivateKinds:        []int{4, 1059},
@@ -173,4 +179,15 @@ func str(get func(string) string, key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// csv separa una lista "a, b, c" en sus elementos, sin vacíos ni espacios.
+func csv(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

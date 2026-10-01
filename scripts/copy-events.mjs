@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Copia todos los eventos de UNA cuenta de un relé a otro, tal cual (ya firmados: no firma nada).
-// Sin dependencias en Node 22 o superior (trae WebSocket). Con una versión anterior: `npm install ws` en la misma carpeta.
+// Funciona sin instalar nada en Node 22+ (trae WebSocket). Si una conexión falla sin explicación, `npm install ws` en la misma carpeta.
 //
 //   node copy-events.mjs <relé origen> <relé destino> <npub o clave hex> [--dry-run]
 //   node copy-events.mjs ws://umbrel.tailb59349.ts.net:4848 wss://relay.hivescope.xyz npub1... --dry-run
@@ -14,12 +14,12 @@ if (!src || !dst || !who) {
   console.error('Uso: node copy-events.mjs <origen> <destino> <npub|hex> [--dry-run]')
   process.exit(2)
 }
-let WS = globalThis.WebSocket
+// Se prefiere la librería `ws` (más tolerante con algunos servidores y proxies); si no está instalada, el WebSocket de Node.
+let WS
+try { WS = (await import('ws')).default } catch { WS = globalThis.WebSocket }
 if (!WS) {
-  try { WS = (await import('ws')).default } catch {
-    console.error('Esta versión de Node no trae WebSocket. Actualiza a Node 22+ o ejecuta `npm install ws` en esta carpeta.')
-    process.exit(2)
-  }
+  console.error('Esta versión de Node no trae WebSocket. Actualiza a Node 22+ o ejecuta `npm install ws` en esta carpeta.')
+  process.exit(2)
 }
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l'

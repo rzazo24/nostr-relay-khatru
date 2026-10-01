@@ -30,6 +30,8 @@ cd test/panel && npm install && npx playwright install chromium && RELAY_BIN=../
 
 docker compose up -d --build                 # relay + Caddy (needs RELAY_DOMAIN in .env)
 ./scripts/backup-db.sh                       # consistent sqlite .backup (not cp)
+# copy one account's events between relays, as-is (read-only on the source; try --dry-run first)
+node scripts/copy-events.mjs <src-relay> <dst-relay> <npub|hex> [--dry-run]
 ```
 
 Maintenance: `.github/dependabot.yml` opens weekly PRs (Go modules, Docker base images, Actions; npm monthly) and the CI job `vulncheck` runs `govulncheck` (fails only on vulnerabilities your code actually calls; the VPS itself patches via unattended-upgrades but needs a manual reboot for new kernels).

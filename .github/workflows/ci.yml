@@ -18,6 +18,16 @@ jobs:
       - run: CGO_ENABLED=1 go vet ./...
       - run: CGO_ENABLED=1 go test ./... -v
 
+  vulncheck:
+    name: Known vulnerabilities (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=1 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   smoke-test:
     name: End-to-end smoke test (Node)
     runs-on: ubuntu-latest

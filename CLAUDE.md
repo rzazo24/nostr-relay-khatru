@@ -32,6 +32,8 @@ docker compose up -d --build                 # relay + Caddy (needs RELAY_DOMAIN
 ./scripts/backup-db.sh                       # consistent sqlite .backup (not cp)
 ```
 
+Maintenance: `.github/dependabot.yml` opens weekly PRs (Go modules, Docker base images, Actions; npm monthly) and the CI job `vulncheck` runs `govulncheck` (fails only on vulnerabilities your code actually calls; the VPS itself patches via unattended-upgrades but needs a manual reboot for new kernels).
+
 CI (`.github/workflows/ci.yml`) runs build/vet/unit tests plus the Node smoke test
 against a real running binary — mirror that when changing behavior.
 

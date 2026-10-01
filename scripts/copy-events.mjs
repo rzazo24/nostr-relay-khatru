@@ -2,7 +2,7 @@
 // Copia todos los eventos de UNA cuenta de un relé a otro, tal cual (ya firmados: no firma nada).
 // Funciona sin instalar nada en Node 22+ (trae WebSocket). Si una conexión falla sin explicación, `npm install ws` en la misma carpeta.
 //
-//   node copy-events.mjs <relé origen> <relé destino> <npub o clave hex> [--dry-run]
+//   node copy-events.mjs <relé origen> <relé destino> <npub o clave hex> [--dry-run] [--exclude=4,30024]
 //   node copy-events.mjs ws://umbrel.tailb59349.ts.net:4848 wss://relay.hivescope.xyz npub1... --dry-run
 //
 // Lee el origen paginando hacia atrás en el tiempo, se salta lo que el destino ya tiene y publica el resto.
@@ -10,6 +10,8 @@
 
 const [src, dst, who, ...flags] = process.argv.slice(2)
 const dry = flags.includes('--dry-run')
+const exclude = new Set((flags.find((f) => f.startsWith('--exclude='))?.slice(10) || '').split(',').filter(Boolean).map(Number))
+if ([...exclude].some(Number.isNaN)) { console.error('--exclude espera números separados por comas, p. ej. --exclude=4,30024'); process.exit(2) }
 if (!src || !dst || !who) {
   console.error('Uso: node copy-events.mjs <origen> <destino> <npub|hex> [--dry-run]')
   process.exit(2)
@@ -50,7 +52,7 @@ process.on('uncaughtException', (e) => { console.error(`\nError: ${e.message}`);
 process.on('unhandledRejection', (e) => { console.error(`\nError: ${e.message || e}`); process.exit(1) })
 
 const pk = npubToHex(who)
-console.log(`Origen: ${src}\nDestino: ${dst}\nCuenta: ${pk}${dry ? '\n(modo prueba: no se publica nada)' : ''}\n`)
+console.log(`Origen: ${src}\nDestino: ${dst}\nCuenta: ${pk}${dry ? '\n(modo prueba: no se publica nada)' : ''}${exclude.size ? `\nExcluidos los tipos: ${[...exclude].join(', ')}` : ''}\n`)
 
 // 1) leer todo del origen, hacia atrás con `until`
 const events = new Map()
@@ -74,7 +76,7 @@ for (let i = 0; i < ids.length; i += 200) {
   const r = await talk(dst, [['REQ', 'h', { ids: ids.slice(i, i + 200) }]], (d) => d[0] === 'EOSE' || d[0] === 'CLOSED')
   r.filter((d) => d[0] === 'EVENT').forEach((d) => have.add(d[2].id))
 }
-const todo = [...events.values()].filter((e) => !have.has(e.id)).sort((a, b) => a.created_at - b.created_at)
+const todo = [...events.values()].filter((e) => !have.has(e.id) && !exclude.has(e.kind)).sort((a, b) => a.created_at - b.created_at)
 const kinds = {}; todo.forEach((e) => (kinds[e.kind] = (kinds[e.kind] || 0) + 1))
 console.log(`Ya estaban en el destino: ${have.size}. Por copiar: ${todo.length} ${JSON.stringify(kinds)}`)
 if (dry || !todo.length) process.exit(0)

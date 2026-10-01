@@ -52,6 +52,7 @@ type Server struct {
 	stats   *stats.Store
 	done    sync.WaitGroup // espera a que acaben las tareas de fondo al cerrar
 	conns   atomic.Int64   // conexiones WebSocket abiertas ahora
+	live    sync.Map       // *khatru.WebSocket de las conexiones contadas (khatru llama a OnDisconnect dos veces por conexión)
 }
 
 // New construye el relé. `version` aparece en el documento NIP-11.
@@ -156,8 +157,16 @@ func New(cfg config.Config, version string) (*Server, error) {
 	s.setupManagementAPI()
 
 	// Conexiones abiertas (para el panel de control).
-	relay.OnConnect = append(relay.OnConnect, func(ctx context.Context) { s.conns.Add(1) })
-	relay.OnDisconnect = append(relay.OnDisconnect, func(ctx context.Context) { s.conns.Add(-1) })
+	relay.OnConnect = append(relay.OnConnect, func(ctx context.Context) {
+		if _, dup := s.live.LoadOrStore(khatru.GetConnection(ctx), struct{}{}); !dup {
+			s.conns.Add(1)
+		}
+	})
+	relay.OnDisconnect = append(relay.OnDisconnect, func(ctx context.Context) {
+		if _, ok := s.live.LoadAndDelete(khatru.GetConnection(ctx)); ok {
+			s.conns.Add(-1)
+		}
+	})
 
 	// Panel de control (solo lectura, solo para el dueño): /admin/api/*
 	panel, err := admin.New(admin.Options{

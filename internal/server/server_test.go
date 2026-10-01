@@ -1277,3 +1277,25 @@ func TestAdminSearch_PaginatesAndShowsModerationState(t *testing.T) {
 		t.Fatal("el resumen de la clave solo va en la primera página")
 	}
 }
+
+func TestOpenConnectionsNeverGoNegative(t *testing.T) {
+	srv, ts := start(t, nil)
+	for i := 0; i < 5; i++ {
+		r := connect(t, ts)
+		r.Close()
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for srv.conns.Load() != 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond) // por si llegara el segundo OnDisconnect de khatru
+	if n := srv.conns.Load(); n != 0 {
+		t.Fatalf("tras cerrar todas las conexiones debe haber 0 abiertas, hay %d", n)
+	}
+	r := connect(t, ts)
+	defer r.Close()
+	time.Sleep(200 * time.Millisecond)
+	if n := srv.conns.Load(); n != 1 {
+		t.Fatalf("con una conexión abierta debe haber 1, hay %d", n)
+	}
+}

@@ -6,7 +6,7 @@ require (
 	github.com/fiatjaf/eventstore v0.17.2
 	github.com/fiatjaf/khatru v0.19.1
 	github.com/mattn/go-sqlite3 v1.14.32
-	github.com/nbd-wtf/go-nostr v0.52.1
+	github.com/nbd-wtf/go-nostr v0.52.3
 )
 
 require (

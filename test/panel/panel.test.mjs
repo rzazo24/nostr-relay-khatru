@@ -49,13 +49,23 @@ async function openPanel({ signWith = () => stack.ownerSecret, extension = true 
   return { ctx, page }
 }
 
-async function login(page) {
+// El relé limita los inicios de sesión a 10 por minuto y por IP: las pruebas hacen uno de verdad (`fresh`) y las demás
+// reutilizan esa sesión metiendo su cookie en el contexto nuevo.
+let sharedCookie = null
+async function login(page, { fresh = false } = {}) {
+  if (!fresh && sharedCookie) {
+    await page.context().addCookies([sharedCookie])
+    await page.reload()
+    await page.waitForSelector('#dash:not([hidden])', { timeout: 10000 })
+    return
+  }
   await page.click('#login-btn')
   try {
     await page.waitForSelector('#dash:not([hidden])', { timeout: 10000 })
   } catch (e) {
     throw new Error(`no se pudo entrar: «${await page.innerText('#login-msg')}»`)
   }
+  if (!fresh) sharedCookie = (await page.context().cookies()).find((c) => c.httpOnly) ?? null
 }
 
 /** Espera un aviso NUEVO del panel (se borra el anterior antes de la acción). */
@@ -128,7 +138,7 @@ describe('panel de control', () => {
 
   it('el dueño entra, la sesión sobrevive a recargar y cerrar sesión la termina', async () => {
     const { ctx, page } = await openPanel()
-    await login(page)
+    await login(page, { fresh: true })
     await page.reload()
     await page.waitForSelector('#dash:not([hidden])', { timeout: 8000 }) // la cookie mantiene la sesión sin volver a firmar
     await page.click('#logout')

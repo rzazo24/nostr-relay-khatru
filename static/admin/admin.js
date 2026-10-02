@@ -327,8 +327,10 @@ async function api(path, body) {
 async function act(path, body, okMsg, opts) {
   try {
     const r = await api(path, body)
+    // Primero se refrescan las listas y luego se avisa: así, cuando ves «hecho», lo que hay en pantalla ya está al día.
+    // (Un fallo al refrescar no convierte en error una acción que sí se hizo.)
+    await Promise.all([load().catch(() => {}), loadModeration(!!(opts && opts.forceInfo)).catch(() => {}), refreshSearch().catch(() => {})])
     toast(typeof okMsg === 'function' ? okMsg(r) : okMsg, false)
-    await Promise.all([load().catch(() => {}), loadModeration(!!(opts && opts.forceInfo)), refreshSearch()])
     return true
   } catch (err) {
     toast(err.message || String(err), true)

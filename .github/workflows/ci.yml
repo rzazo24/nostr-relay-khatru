@@ -62,7 +62,7 @@ jobs:
       - name: Check --healthcheck subcommand
         run: RELAY_LISTEN_ADDR=:3334 ./nostr-relay-khatru-ci --healthcheck
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 

@@ -388,7 +388,7 @@ async function loadModeration(forceInfo) {
 const ACTION_LABELS = {
   'ban-pubkey': 'Clave baneada', 'unban-pubkey': 'Baneo quitado', 'allow-pubkey': 'Clave permitida', 'unallow-pubkey': 'Quitada de la lista blanca',
   'ban-event': 'Evento vetado', 'unban-event': 'Veto quitado', 'kind-allow': 'Tipo permitido', 'kind-disallow': 'Tipo prohibido', 'kind-clear': 'Regla de tipo quitada',
-  'ip-block': 'IP bloqueada', 'ip-unblock': 'IP desbloqueada', info: 'Información del relé', login: 'Inicio de sesión', logout: 'Cierre de sesión',
+  'ip-block': 'IP bloqueada', 'ip-unblock': 'IP desbloqueada', info: 'Información del relé', backup: 'Copia de seguridad descargada', login: 'Inicio de sesión', logout: 'Cierre de sesión',
 }
 function renderHistory(items) {
   const body = $('audit').querySelector('tbody')
@@ -455,6 +455,35 @@ document.querySelectorAll('.tabs [data-range]').forEach((b) => b.addEventListene
   renderActivity()
   loadHistory().catch((e) => { $('updated').textContent = `Error al cargar el histórico: ${e.message}` })
 }))
+
+// ---------- copia de seguridad ----------
+
+$('backup-btn').addEventListener('click', async () => {
+  const btn = $('backup-btn')
+  if (btn.disabled) return
+  btn.disabled = true
+  const label = btn.textContent
+  btn.textContent = 'Preparando la copia…'
+  try {
+    const res = await fetch('/admin/api/backup', { credentials: 'same-origin', cache: 'no-store' })
+    if (res.status === 401) { stop(); show('login'); return }
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`)
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'nostr-relay-khatru.sqlite.gz'
+    const url = URL.createObjectURL(await res.blob())
+    const a = el('a', { href: url, download: name })
+    document.body.append(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    toast(`Copia descargada: ${name}`, false)
+    loadModeration(false).catch(() => {}) // para que salga en el historial
+  } catch (err) {
+    toast(`No se pudo descargar la copia: ${err.message}`, true)
+  } finally {
+    btn.disabled = false
+    btn.textContent = label
+  }
+})
 
 // ---------- búsqueda ----------
 

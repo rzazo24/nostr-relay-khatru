@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
+import zlib from 'node:zlib'
 import { execFileSync } from 'node:child_process'
 import { after, before, describe, it } from 'node:test'
 import { chromium } from 'playwright'
@@ -368,6 +369,22 @@ describe('panel de control', () => {
     await page.click('#refresh')
     await page.waitForFunction(() => [...document.querySelectorAll('.card')].some((c) => c.textContent.includes('Última copia') && c.querySelector('.v.warn')), null, { timeout: 8000 })
     assert.match(await backup.innerText(), /hace 2 d/)
+    await ctx.close()
+  })
+
+  it('copia de seguridad: el botón descarga una base de datos SQLite válida y comprimida, y queda en el historial', async () => {
+    await pub(newKey().sk, 1, 'nota para la copia')
+    const { ctx, page } = await openPanel()
+    await login(page)
+    const [download] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#backup-btn')])
+    assert.match(download.suggestedFilename(), /^nostr-relay-khatru-\d{8}T\d{6}Z\.sqlite\.gz$/)
+    const file = await download.path()
+    const raw = zlib.gunzipSync(fs.readFileSync(file))
+    assert.equal(raw.subarray(0, 15).toString(), 'SQLite format 3', 'tras descomprimir es una base de datos SQLite')
+    assert.ok(raw.length > 4096)
+    assert.match(await toast(page), /Copia descargada/)
+    assert.equal(await page.isEnabled('#backup-btn'), true, 'el botón vuelve a estar activo')
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('Copia de seguridad descargada'), null, { timeout: 8000 })
     await ctx.close()
   })
 

@@ -127,6 +127,11 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**Backup download** (`GET /admin/api/backup`, `admin/backup.go`): `VACUUM INTO <tmp next to the DB>` over its *own* `mode=ro` connection
+(the panel's `_query_only` connection can't run VACUUM INTO), gzipped on the fly, tmp deleted after; one at a time (`backupBusy`, 429 otherwise),
+refuses `Sec-Fetch-Site: cross-site`, logged as action `backup`. Frontend fetches it into a Blob (fine under the strict CSP) — fine for DBs up to a
+few hundred MB; if it grows past that, switch to a plain `<a download>` navigation.
+
 **Action history** (`moderation_log` table, `Store.LogAction/RecentActions`, `Panel.record`): every panel action and every NIP-86
 mutation (wrapped by `audited` in `setupManagementAPI`) stores ts/source/action/target(full)/detail (the owner's own note; for relay-info
 only the *names* of the fields touched). Panel logins are logged; logout only when a session existed (the endpoint is unauthenticated).

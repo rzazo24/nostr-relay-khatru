@@ -34,7 +34,7 @@
 
     <div id="dash" hidden>
       <section class="cards" id="cards" aria-label="Resumen"></section>
-      <p class="muted small cards-help"><button type="button" class="linkish" data-help="h-cards">¿Qué significa cada número?</button></p>
+      <p class="muted small cards-help"><button type="button" class="linkish" data-help="h-cards">¿Qué significa cada número?</button> · <button type="button" class="linkish" id="backup-btn" title="Descarga ahora una copia completa de la base de datos">Descargar copia de seguridad ahora</button></p>
 
       <section class="panel">
         <h2>Actividad <span id="range-label" class="muted small"></span> <button type="button" class="q" data-help="h-activity" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
@@ -209,6 +209,7 @@
           <dt>Conexiones abiertas</dt><dd>Clientes conectados en este momento. Una misma app puede abrir varias conexiones, así que no equivale exactamente a personas.</dd>
           <dt>Disco usado</dt><dd>Qué parte del disco del servidor está ocupada (la del disco donde vive la base de datos) y cuánto queda libre. Se pone en rojo a partir del 85 %: conviene hacer sitio antes de que se llene.</dd>
           <dt>Última copia de seguridad</dt><dd>Cuándo se hizo la copia más reciente de la base de datos, cuánto pesa y cuántas hay guardadas. Solo aparece si el relé sabe dónde están las copias (variable <code>RELAY_BACKUP_DIR</code>). Se pone en rojo si la última tiene más de 36 horas o no hay ninguna: la copia automática se hace cada noche.</dd>
+          <dt>Descargar copia de seguridad ahora</dt><dd>El enlace bajo los números descarga <b>en ese momento</b> una copia completa de la base de datos (un archivo <code>.sqlite.gz</code>), además de la que se hace sola cada noche. Es consistente aunque el relé esté escribiendo y se restaura igual que las automáticas con <code>scripts/restore-db.sh</code>. <b>Contiene todo lo que guarda el relé</b>, incluidos los mensajes privados (cifrados) y tus listas de moderación, así que trátala como un secreto. Va comprimida en la memoria del navegador, así que está pensada para bases de datos de hasta unos cientos de MB. Queda anotada en el historial.</dd>
           <dt>Rechazos desde el arranque</dt><dd>Publicaciones y consultas que el relé ha rechazado desde que se inició. Se pone a cero cuando el relé se reinicia. Un número alto no es malo por sí mismo: suele ser tráfico ajeno frenado por los límites de velocidad (mira «Rechazos»).</dd>
         </dl>
       </section>

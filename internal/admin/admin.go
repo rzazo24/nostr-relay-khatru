@@ -149,6 +149,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/api/stats", p.requireSession(p.stats))
 	mux.HandleFunc("GET /admin/api/history", p.requireSession(p.history))
 	mux.HandleFunc("GET /admin/api/search", p.requireSession(p.search))
+	mux.HandleFunc("GET /admin/api/backup", p.requireSession(p.backup))
 	p.mountModeration(mux)
 }
 

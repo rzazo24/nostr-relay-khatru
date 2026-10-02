@@ -2,8 +2,10 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1493,5 +1495,80 @@ func TestAdminStats_ServerStatusDiskAndBackups(t *testing.T) {
 	_, stats2 := adminCall(t, ts2, "GET", "/admin/api/stats", "", cookie2)
 	if stats2["server"].(map[string]any)["backup"].(map[string]any)["configured"] != false {
 		t.Fatal("sin RELAY_BACKUP_DIR las copias no están configuradas")
+	}
+}
+
+func TestAdminBackup_DownloadsAConsistentGzippedCopy(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	srv, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	for i := 0; i < 5; i++ {
+		if err := publish(r, someone.event(1, fmt.Sprintf("nota %d", i), nil)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/backup", "", ""); res.StatusCode != 401 {
+		t.Fatal("sin sesión no se puede descargar la base de datos")
+	}
+	cookie := adminLogin(t, ts, owner)
+	req, _ := http.NewRequest("GET", ts.URL+"/admin/api/backup", nil)
+	req.AddCookie(&http.Cookie{Name: "hs_admin", Value: cookie})
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "application/gzip" || !strings.Contains(res.Header.Get("Content-Disposition"), "nostr-relay-khatru-") || !strings.Contains(res.Header.Get("Content-Disposition"), ".sqlite.gz") {
+		t.Fatalf("respuesta: %d %v", res.StatusCode, res.Header)
+	}
+	zr, err := gzip.NewReader(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "copy.sqlite")
+	f, _ := os.Create(out)
+	if _, err := io.Copy(f, zr); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	db, err := sql.Open("sqlite3", "file:"+out+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM event WHERE pubkey = ?`, someone.pk).Scan(&n); err != nil || n != 5 {
+		t.Fatalf("la copia debe abrirse y tener las 5 notas: %d %v", n, err)
+	}
+	if ok, _ := db.Query(`PRAGMA integrity_check`); ok != nil {
+		var v string
+		ok.Next()
+		ok.Scan(&v)
+		ok.Close()
+		if v != "ok" {
+			t.Fatalf("integrity_check: %s", v)
+		}
+	}
+	// no deja archivos temporales junto a la base de datos y queda anotada en el historial
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(srv.cfg.DBPath), ".panel-backup-*"))
+	if len(left) != 0 {
+		t.Fatalf("archivos temporales sin borrar: %v", left)
+	}
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	found := false
+	for _, h := range lists["history"].([]any) {
+		if h.(map[string]any)["action"] == "backup" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("la descarga debe quedar en el historial")
+	}
+	// una petición de otro sitio se rechaza aunque lleve la cookie
+	req2, _ := http.NewRequest("GET", ts.URL+"/admin/api/backup", nil)
+	req2.AddCookie(&http.Cookie{Name: "hs_admin", Value: cookie})
+	req2.Header.Set("Sec-Fetch-Site", "cross-site")
+	if res2, _ := http.DefaultClient.Do(req2); res2.StatusCode != 403 {
+		t.Fatalf("cross-site debe dar 403, dio %d", res2.StatusCode)
 	}
 }

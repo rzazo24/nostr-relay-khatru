@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -178,6 +179,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		Owner:        cfg.PubKey,
 		PublicURL:    cfg.PublicURL,
 		DBPath:       cfg.DBPath,
+		BackupDir:    cfg.BackupDir,
 		Version:      version,
 		StartedAt:    time.Now(),
 		Activity:     s.act,
@@ -354,8 +356,19 @@ func (s *Server) setupManagementAPI() {
 		return out
 	}
 
-	api.BanPubKey = func(ctx context.Context, pubkey, reason string) error { return st.BanPubKey(pubkey, reason) }
-	api.AllowPubKey = func(ctx context.Context, pubkey, reason string) error { return st.AllowPubKey(pubkey, reason) }
+	// Lo que se hace por NIP-86 también queda en el historial del panel (con source "nip86").
+	audited := func(action, target, detail string, err error) error {
+		if err == nil {
+			st.LogAction("nip86", action, target, detail)
+		}
+		return err
+	}
+	api.BanPubKey = func(ctx context.Context, pubkey, reason string) error {
+		return audited("ban-pubkey", pubkey, reason, st.BanPubKey(pubkey, reason))
+	}
+	api.AllowPubKey = func(ctx context.Context, pubkey, reason string) error {
+		return audited("allow-pubkey", pubkey, reason, st.AllowPubKey(pubkey, reason))
+	}
 	api.ListBannedPubKeys = func(ctx context.Context) ([]nip86.PubKeyReason, error) { return toPubKeys(st.BannedPubKeys()), nil }
 	api.ListAllowedPubKeys = func(ctx context.Context) ([]nip86.PubKeyReason, error) { return toPubKeys(st.AllowedPubKeys()), nil }
 
@@ -365,7 +378,7 @@ func (s *Server) setupManagementAPI() {
 		}
 		// además de impedir que vuelva, se borra si ya estaba guardado
 		_, err := s.DeleteEventByID(ctx, id)
-		return err
+		return audited("ban-event", id, reason, err)
 	}
 	api.ListBannedEvents = func(ctx context.Context) ([]nip86.IDReason, error) {
 		es := st.BannedEvents()
@@ -376,8 +389,12 @@ func (s *Server) setupManagementAPI() {
 		return out, nil
 	}
 
-	api.BlockIP = func(ctx context.Context, ip net.IP, reason string) error { return st.BlockIP(ip.String(), reason) }
-	api.UnblockIP = func(ctx context.Context, ip net.IP, reason string) error { return st.UnblockIP(ip.String()) }
+	api.BlockIP = func(ctx context.Context, ip net.IP, reason string) error {
+		return audited("ip-block", ip.String(), reason, st.BlockIP(ip.String(), reason))
+	}
+	api.UnblockIP = func(ctx context.Context, ip net.IP, reason string) error {
+		return audited("ip-unblock", ip.String(), "", st.UnblockIP(ip.String()))
+	}
 	api.ListBlockedIPs = func(ctx context.Context) ([]nip86.IPReason, error) {
 		es := st.BlockedIPs()
 		out := make([]nip86.IPReason, len(es))
@@ -387,14 +404,24 @@ func (s *Server) setupManagementAPI() {
 		return out, nil
 	}
 
-	api.AllowKind = func(ctx context.Context, kind int) error { return st.AllowKind(kind) }
-	api.DisallowKind = func(ctx context.Context, kind int) error { return st.DisallowKind(kind) }
+	api.AllowKind = func(ctx context.Context, kind int) error {
+		return audited("kind-allow", strconv.Itoa(kind), "", st.AllowKind(kind))
+	}
+	api.DisallowKind = func(ctx context.Context, kind int) error {
+		return audited("kind-disallow", strconv.Itoa(kind), "", st.DisallowKind(kind))
+	}
 	api.ListAllowedKinds = func(ctx context.Context) ([]int, error) { return st.AllowedKinds(), nil }
 	api.ListDisAllowedKinds = func(ctx context.Context) ([]int, error) { return st.DisallowedKinds(), nil }
 
-	api.ChangeRelayName = func(ctx context.Context, v string) error { return st.SetSetting(settingName, v) }
-	api.ChangeRelayDescription = func(ctx context.Context, v string) error { return st.SetSetting(settingDescription, v) }
-	api.ChangeRelayIcon = func(ctx context.Context, v string) error { return st.SetSetting(settingIcon, v) }
+	api.ChangeRelayName = func(ctx context.Context, v string) error {
+		return audited("info", "", "cambiados: nombre", st.SetSetting(settingName, v))
+	}
+	api.ChangeRelayDescription = func(ctx context.Context, v string) error {
+		return audited("info", "", "cambiados: descripción", st.SetSetting(settingDescription, v))
+	}
+	api.ChangeRelayIcon = func(ctx context.Context, v string) error {
+		return audited("info", "", "cambiados: icono", st.SetSetting(settingIcon, v))
+	}
 }
 
 // logEvent / logFilter envuelven una política para dejar constancia (sin contenido ni

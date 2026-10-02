@@ -42,7 +42,8 @@ function ago(unix, now) {
 function bytes(n) {
   if (n < 1024) return `${n} B`
   if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1048576).toFixed(1)} MB`
+  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`
+  return `${(n / 1073741824).toFixed(1)} GB`
 }
 function duration(s) {
   if (s < 3600) return `${Math.floor(s / 60)} min`
@@ -123,7 +124,19 @@ function render(d) {
     ['Eventos guardados', fmt(d.events.total)], ['Claves distintas', fmt(d.events.pubkeys)], ['Últimas 24 h', fmt(d.events.last24h)],
     ['Base de datos', bytes(d.dbBytes)], ['Conexiones abiertas', fmt(d.connections)], ['Rechazos desde el arranque', fmt(rejectedTotal)],
   ]
-  $('cards').replaceChildren(...cards.map(([l, v]) => el('div', { class: 'card' }, el('div', { class: 'v', text: v }), el('div', { class: 'l', text: l }))))
+  // Estado del servidor: disco usado (rojo a partir del 85 %) y última copia de seguridad (rojo si hace más de 36 h o no hay).
+  const sv = d.server || {}
+  const extra = []
+  if (sv.diskTotal > 0) {
+    const used = Math.round((1 - sv.diskFree / sv.diskTotal) * 100)
+    extra.push({ l: 'Disco usado', v: `${used} %`, s: `${bytes(sv.diskFree)} libres`, warn: used >= 85 })
+  }
+  if (sv.backup && sv.backup.configured) {
+    const b = sv.backup
+    const old = !b.last || now - b.last > 36 * 3600
+    extra.push({ l: 'Última copia de seguridad', v: b.last ? ago(b.last, now) : 'ninguna', s: b.last ? `${bytes(b.lastBytes)} · ${b.count} guardadas` : 'no se encontró ninguna', warn: old })
+  }
+  $('cards').replaceChildren(...cards.map(([l, v]) => ({ l, v })).concat(extra).map((c) => el('div', { class: 'card' }, el('div', { class: c.warn ? 'v warn' : 'v', text: c.v }), el('div', { class: 'l', text: c.l }), c.s ? el('div', { class: 's', text: c.s }) : null)))
 
   liveMinutes = d.activity.minutes
   renderActivity()
@@ -220,6 +233,7 @@ let range = '60m'
 let longHistory = null // último histórico pedido (para el periodo elegido)
 
 const dayFmt = (unix) => { const d = new Date(unix * 1000); return `${two(d.getDate())}/${two(d.getMonth() + 1)}` }
+const dateTimeFmt = (unix) => { const d = new Date(unix * 1000); return `${two(d.getDate())}/${two(d.getMonth() + 1)} ${two(d.getHours())}:${two(d.getMinutes())}` }
 const hourFmt = (unix) => { const d = new Date(unix * 1000); return `${two(d.getDate())}/${two(d.getMonth() + 1)} ${two(d.getHours())}:00` }
 
 // Pinta la gráfica y el resumen del periodo elegido.
@@ -355,6 +369,8 @@ async function loadModeration(forceInfo) {
   const kinds = [...(m.disallowedKinds || []).map((k) => ({ key: String(k), kind: k, reason: '', rule: 'prohibido' })), ...(m.allowedKinds || []).map((k) => ({ key: String(k), kind: k, reason: '', rule: 'permitido' }))]
   fillList('l-kinds', kinds, 'Quitar', (r) => act('kind', { kind: r.kind, rule: 'clear' }, 'Regla quitada'), (r) => el('span', { text: `${kindName(r.kind)} — ${r.rule}` }))
 
+  renderHistory(m.history || [])
+
   // El formulario de información solo se rellena al principio y tras guardar/restaurar:
   // si se rellenara en cada refresco borraría lo que estés escribiendo.
   if (first || forceInfo) {
@@ -364,6 +380,26 @@ async function loadModeration(forceInfo) {
     for (const k of INFO_FIELDS) f.elements[k].value = infoText(m.info, k)
   }
   for (const k of INFO_FIELDS) $(`o-${k}`).hidden = !m.infoOverrides[k]
+}
+
+// Historial de acciones (lo registra el relé; el origen es el panel o un cliente NIP-86).
+const ACTION_LABELS = {
+  'ban-pubkey': 'Clave baneada', 'unban-pubkey': 'Baneo quitado', 'allow-pubkey': 'Clave permitida', 'unallow-pubkey': 'Quitada de la lista blanca',
+  'ban-event': 'Evento vetado', 'unban-event': 'Veto quitado', 'kind-allow': 'Tipo permitido', 'kind-disallow': 'Tipo prohibido', 'kind-clear': 'Regla de tipo quitada',
+  'ip-block': 'IP bloqueada', 'ip-unblock': 'IP desbloqueada', info: 'Información del relé', login: 'Inicio de sesión', logout: 'Cierre de sesión',
+}
+function renderHistory(items) {
+  const body = $('audit').querySelector('tbody')
+  body.replaceChildren(...items.map((a) => {
+    let target = el('td', { text: '' })
+    if (a.target) {
+      const txt = /^[0-9a-f]{64}$/.test(a.target) ? a.target.slice(0, 12) + '…' : a.target
+      target = el('td', {}, el('code', { text: txt, title: a.target }))
+    }
+    return el('tr', {}, el('td', { text: dateTimeFmt(a.t) }), el('td', { text: ACTION_LABELS[a.action] || a.action }), target,
+      el('td', { class: 'reason', text: a.detail || '' }), el('td', { text: a.source === 'nip86' ? 'NIP-86' : 'panel' }))
+  }))
+  if (!items.length) body.append(el('tr', {}, el('td', { colspan: '5', class: 'muted', text: 'Todavía no hay acciones anotadas.' })))
 }
 
 const INFO_FIELDS = ['name', 'description', 'icon', 'contact', 'tags', 'languages', 'postingPolicy']
@@ -494,7 +530,7 @@ function keyCard(k) {
   top.append(badges)
   const npub = el('button', { class: 'pk', type: 'button', title: 'Copiar el npub', text: k.npub })
   npub.addEventListener('click', () => navigator.clipboard.writeText(k.npub).then(() => { npub.textContent = 'copiado ✓'; setTimeout(() => { npub.textContent = k.npub }, 1200) }).catch(() => {}))
-  const when = k.events ? `${fmt(k.events)} evento(s) guardados · el primero ${hourFmt(k.first)}, el último ${hourFmt(k.last)}` : 'Sin eventos guardados'
+  const when = k.events ? `${fmt(k.events)} evento(s) guardados · el primero ${dateTimeFmt(k.first)}, el último ${dateTimeFmt(k.last)}` : 'Sin eventos guardados'
   card.append(top, el('div', { class: 'small' }, npub), el('div', { class: 'muted small', text: when }))
   if (k.byKind.length) {
     const kinds = el('div', { class: 'kinds' })

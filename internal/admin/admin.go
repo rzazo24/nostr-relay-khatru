@@ -87,6 +87,7 @@ type Options struct {
 	Owner        string // pubkey (hex) del dueño; vacío = panel desactivado
 	PublicURL    string // URL pública https (si vacía, se deduce de la petición)
 	DBPath       string
+	BackupDir    string // dónde deja scripts/backup-db.sh las copias (vacío = no se muestra el estado de las copias)
 	Version      string
 	StartedAt    time.Time
 	Activity     Activity
@@ -204,14 +205,19 @@ func (p *Panel) login(w http.ResponseWriter, r *http.Request) {
 		Name: cookieName, Value: token, Path: "/admin", MaxAge: int(sessionLifetime.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isHTTPS(r),
 	})
+	p.record("login", "", "", "")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "expiresIn": int(sessionLifetime.Seconds())})
 }
 
 func (p *Panel) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(cookieName); err == nil {
 		p.mu.Lock()
+		_, had := p.sessions[c.Value]
 		delete(p.sessions, c.Value)
 		p.mu.Unlock()
+		if had { // sin sesión no se anota nada (cualquiera puede llamar a este endpoint)
+			p.record("logout", "", "", "")
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/admin", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isHTTPS(r)})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -518,6 +524,7 @@ func (p *Panel) stats(w http.ResponseWriter, r *http.Request) {
 		"startedAt":   p.o.StartedAt.Unix(),
 		"connections": conns,
 		"dbBytes":     p.dbBytes(),
+		"server":      p.serverStatus(),
 		"events":      ev,
 		"activity": map[string]any{
 			"minutes":    p.o.Activity.Minutes(now, 60),

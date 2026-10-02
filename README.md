@@ -135,6 +135,10 @@ An invalid value stops the relay at startup with an error naming the variable.
 ## Control panel (owner only)
 
 `https://<RELAY_DOMAIN>/admin` is a control panel for the relay's owner: events stored (by kind), distinct keys, database size, open connections, a per-minute activity chart for the last hour, rejections (by reason and the latest ones) and the newest events with their (trimmed) public content, the moderation lists at a glance and the current configuration. 
+**Server status** (cards): disk used (red from 85 %) and the age/size of the latest backup (red if older than 36 h or missing). The backup card needs `BACKUP_DIR` in `.env`, pointing at the folder `scripts/backup-db.sh` writes to; compose mounts it read-only and sets `RELAY_BACKUP_DIR`.
+
+**Action history**: every owner action (bans, vetoes, rules, relay-info changes, panel logins/logouts, and anything done through NIP-86) is stored in the database with its full target and your note — the last 1 000 are kept, the panel shows 100.
+
 **Noisiest keys**: a ranking of the keys with the most rejected *events* in the last 24 h (in-memory counters, reset on restart, 1 000 keys at most), with the full public key, the last kind, the most frequent reason, and *Ban* / *Search* buttons (your own key can't be banned). **Relay information** in *Moderation* now also edits `contact`, `tags`, `language_tags` and `posting_policy` (what directories read); changes override the `.env` values until you restore them.
 
 **Search** (read-only): one box that understands what you type — an `npub`/64-hex key (events of that account plus a *key summary*: events stored, first/last seen, kinds, profile name, banned / allow-listed), a `note1…`/`nevent1…`/hex event id, the first 6+ characters of a key or id (the 8-character keys shown in *Rejections* are clickable), a small number (an event kind) or any text (case-insensitive match in the content of public events; private messages are never searched or shown) — with an optional kind filter, pages of 50 (*Cargar más*) and a total capped at 10 000. Results carry the same *Veto event* / *Ban key* buttons, and the key summary can ban or unban.

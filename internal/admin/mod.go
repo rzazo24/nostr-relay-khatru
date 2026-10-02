@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -51,6 +52,10 @@ type InfoView struct {
 	Languages     []string `json:"languages"`
 	PostingPolicy string   `json:"postingPolicy"`
 }
+
+// infoLabels son los nombres de los campos tal como se ven en el historial.
+var infoLabels = map[string]string{"name": "nombre", "description": "descripción", "icon": "icono", "contact": "contacto",
+	"tags": "etiquetas", "languages": "idiomas", "postingPolicy": "normas de uso"}
 
 var langCode = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
 
@@ -203,6 +208,7 @@ func (p *Panel) moderationLists(w http.ResponseWriter, r *http.Request) {
 		"info":            info,
 		"infoDefaults":    defaults,
 		"infoOverrides":   overrides,
+		"history":         p.o.Store.RecentActions(100),
 		"owner":           p.o.Owner,
 	})
 }
@@ -277,9 +283,15 @@ func decodeEventID(s string) (string, error) {
 	return "", fmt.Errorf("not a valid event id (use 64-character hex, note1… or nevent1…)")
 }
 
-func (p *Panel) log(action, target string) {
+// record deja constancia de una acción del dueño: una línea en el registro del relé (solo `logTarget`, que son
+// como mucho 8 caracteres, y nunca el motivo ni IPs) y una entrada en el historial persistente del panel
+// (con el objetivo completo y la nota).
+func (p *Panel) record(action, logTarget, target, detail string) {
 	if p.o.Log != nil {
-		p.o.Log(action, target)
+		p.o.Log(action, logTarget)
+	}
+	if p.o.Store != nil {
+		p.o.Store.LogAction("panel", action, target, detail)
 	}
 }
 
@@ -314,7 +326,11 @@ func (p *Panel) banPubKey(body map[string]any, r *http.Request) (any, error) {
 			return nil, fmt.Errorf("banned, but deleting their events failed: %v", err)
 		}
 	}
-	p.log("ban-pubkey", short(pk))
+	detail := reason
+	if deleted > 0 {
+		detail = strings.TrimSpace(fmt.Sprintf("%s (borrados %d eventos)", reason, deleted))
+	}
+	p.record("ban-pubkey", short(pk), pk, detail)
 	return map[string]any{"deleted": deleted}, nil
 }
 
@@ -327,7 +343,7 @@ func (p *Panel) unbanPubKey(body map[string]any, r *http.Request) (any, error) {
 	if err := p.o.Store.UnbanPubKey(pk); err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("unban-pubkey", short(pk))
+	p.record("unban-pubkey", short(pk), pk, "")
 	return nil, nil
 }
 
@@ -344,7 +360,7 @@ func (p *Panel) allowPubKey(body map[string]any, r *http.Request) (any, error) {
 	if err := p.o.Store.AllowPubKey(pk, reason); err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("allow-pubkey", short(pk))
+	p.record("allow-pubkey", short(pk), pk, reason)
 	return nil, nil
 }
 
@@ -357,7 +373,7 @@ func (p *Panel) unallowPubKey(body map[string]any, r *http.Request) (any, error)
 	if err := p.o.Store.RemoveAllowedPubKey(pk); err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("unallow-pubkey", short(pk))
+	p.record("unallow-pubkey", short(pk), pk, "")
 	return nil, nil
 }
 
@@ -380,7 +396,7 @@ func (p *Panel) banEvent(body map[string]any, r *http.Request) (any, error) {
 			return nil, fmt.Errorf("banned, but deleting the stored event failed: %v", err)
 		}
 	}
-	p.log("ban-event", short(id))
+	p.record("ban-event", short(id), id, reason)
 	return map[string]any{"deleted": deleted}, nil
 }
 
@@ -393,7 +409,7 @@ func (p *Panel) unbanEvent(body map[string]any, r *http.Request) (any, error) {
 	if err := p.o.Store.UnbanEvent(id); err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("unban-event", short(id))
+	p.record("unban-event", short(id), id, "")
 	return nil, nil
 }
 
@@ -418,7 +434,7 @@ func (p *Panel) kindRule(body map[string]any, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("kind-"+rule, strconv.Itoa(kind))
+	p.record("kind-"+rule, strconv.Itoa(kind), strconv.Itoa(kind), "")
 	return nil, nil
 }
 
@@ -430,9 +446,11 @@ func (p *Panel) ipRule(body map[string]any, r *http.Request) (any, error) {
 	}
 	action, _ := body["action"].(string)
 	var err error
+	reason := ""
 	switch action {
 	case "block":
-		reason, rerr := str(body, "reason", 200)
+		var rerr error
+		reason, rerr = str(body, "reason", 200)
 		if rerr != nil {
 			return nil, rerr
 		}
@@ -445,7 +463,7 @@ func (p *Panel) ipRule(body map[string]any, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not save the change")
 	}
-	p.log("ip-"+action, "")
+	p.record("ip-"+action, "", ip.String(), reason)
 	return nil, nil
 }
 
@@ -522,7 +540,29 @@ func (p *Panel) setInfo(body map[string]any, r *http.Request) (any, error) {
 			}
 		}
 	}
-	p.log("info", "")
+	var changed, restored []string
+	for field := range infoFields {
+		if _, ok := body[field]; ok {
+			changed = append(changed, infoLabels[field])
+		}
+	}
+	if list, ok := body["reset"].([]any); ok {
+		for _, f := range list {
+			if name, _ := f.(string); infoFields[name] != "" {
+				restored = append(restored, infoLabels[name])
+			}
+		}
+	}
+	sort.Strings(changed)
+	sort.Strings(restored)
+	var parts []string
+	if len(changed) > 0 {
+		parts = append(parts, "cambiados: "+strings.Join(changed, ", "))
+	}
+	if len(restored) > 0 {
+		parts = append(parts, "restaurados: "+strings.Join(restored, ", "))
+	}
+	p.record("info", "", "", strings.Join(parts, " · "))
 	return map[string]any{"info": p.o.Info()}, nil
 }
 

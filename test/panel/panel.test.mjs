@@ -3,6 +3,8 @@
 // Cubre: entrada y sesión, resumen, ayuda, histórico, moderación, búsqueda y que la política de contenido
 // estricta del panel no bloquee nada (ni una sola violación en la consola).
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { after, before, describe, it } from 'node:test'
 import { chromium } from 'playwright'
@@ -339,6 +341,49 @@ describe('panel de control', () => {
     assert.match(await pub(loud.sk, 1, 'hola'), /banned/)
     assert.match(await page.innerText('#l-banned'), /claves más ruidosas/)
     await page.click('#l-banned button')
+    await ctx.close()
+  })
+
+  it('estado del servidor: disco y última copia de seguridad (en rojo si es antigua)', async () => {
+    const { ctx, page } = await openPanel()
+    await login(page)
+    const card = (label) => page.locator('.card', { hasText: label })
+    assert.match(await card('Disco usado').innerText(), /\d+ %[\s\S]*libres/)
+    assert.equal(await card('Disco usado').locator('.v').getAttribute('class'), 'v', 'con disco de sobra no se avisa')
+    const backup = card('Última copia de seguridad')
+    assert.match(await backup.innerText(), /hace[\s\S]*2\.0 KB · 1 guardadas/)
+    assert.equal(await backup.locator('.v').getAttribute('class'), 'v', 'una copia reciente no se marca')
+
+    fs.utimesSync(stack.backupFile, new Date(Date.now() - 50 * 3600 * 1000), new Date(Date.now() - 50 * 3600 * 1000)) // hace 50 h
+    await page.click('#refresh')
+    await page.waitForFunction(() => [...document.querySelectorAll('.card')].some((c) => c.textContent.includes('Última copia') && c.querySelector('.v.warn')), null, { timeout: 8000 })
+    assert.match(await backup.innerText(), /hace 2 d/)
+    await ctx.close()
+  })
+
+  it('historial de acciones: anota lo que haces (con tu nota), los inicios de sesión y lo hecho por NIP-86', async () => {
+    const target = newKey(), other = newKey()
+    const { ctx, page } = await openPanel()
+    await login(page)
+    await page.fill('#f-ban [name=pubkey]', target.pk)
+    await page.fill('#f-ban [name=reason]', 'motivo <b>de prueba</b>')
+    assert.match(await clickAndToast(page, '#f-ban button[type=submit]'), /baneada/)
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('Clave baneada'), null, { timeout: 8000 })
+    const rows = await page.$$eval('#audit tbody tr', (r) => r.map((x) => x.innerText.replace(/\s+/g, ' ')))
+    assert.ok(rows[0].includes('Clave baneada') && rows[0].includes(target.pk.slice(0, 12)) && rows[0].includes('motivo <b>de prueba</b>') && rows[0].endsWith('panel'), rows[0])
+    assert.equal(await page.locator('#audit tbody tr b').count(), 0, 'la nota es texto, no HTML')
+    assert.equal(await page.locator('#audit tbody tr').first().locator('code').getAttribute('title'), target.pk, 'el completo sale al pasar el ratón')
+    assert.ok(rows.some((r) => r.includes('Inicio de sesión')), 'el inicio de sesión queda anotado')
+
+    // lo hecho con un cliente NIP-86 también sale, marcado como tal
+    const auth = (url, body) => { const ev = finalizeEvent({ kind: 27235, created_at: now(), tags: [['u', url], ['method', 'POST'], ['payload', createHash('sha256').update(body).digest('hex')], ['n', String(Math.random())]], content: '' }, stack.ownerSecret); return 'Nostr ' + Buffer.from(JSON.stringify(ev)).toString('base64') }
+    const body = JSON.stringify({ method: 'banpubkey', params: [other.pk, 'desde nip86'] })
+    const res = await fetch(stack.relayHttp + '/', { method: 'POST', headers: { 'Content-Type': 'application/nostr+json+rpc', Authorization: auth(stack.relayHttp + '/', body) }, body })
+    assert.equal(res.status, 200, await res.text())
+    await page.click('#refresh')
+    await page.waitForFunction(() => /desde nip86[\s\S]*NIP-86|NIP-86/.test(document.querySelector('#audit tbody').textContent), null, { timeout: 8000 })
+    assert.ok((await page.innerText('#audit tbody')).includes('desde nip86'))
+
     await ctx.close()
   })
 

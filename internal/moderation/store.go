@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -49,6 +50,7 @@ func Open(path string) (*Store, error) {
 	for _, stmt := range []string{
 		`CREATE TABLE IF NOT EXISTS moderation_entries (list TEXT NOT NULL, key TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', PRIMARY KEY (list, key))`,
 		`CREATE TABLE IF NOT EXISTS moderation_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS moderation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '')`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			db.Close()
@@ -280,4 +282,48 @@ func (s *Store) DeleteSetting(key string) error {
 	}
 	delete(s.settings, key)
 	return nil
+}
+
+// Action es una entrada del historial de acciones de moderación.
+type Action struct {
+	ID     int64  `json:"id"`
+	T      int64  `json:"t"`
+	Source string `json:"source"` // "panel" o "nip86"
+	Action string `json:"action"`
+	Target string `json:"target"` // clave, id, IP o tipo afectado (vacío si no aplica)
+	Detail string `json:"detail"` // motivo u otra nota del dueño
+}
+
+// maxLogged es cuántas acciones se recuerdan; al pasarse se borran las más antiguas.
+const maxLogged = 1000
+
+// LogAction anota una acción del dueño (desde el panel o NIP-86). Un fallo al anotar no debe impedir la acción,
+// por eso solo devuelve el error para quien quiera mirarlo.
+func (s *Store) LogAction(source, action, target, detail string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.db.Exec(`INSERT INTO moderation_log (ts, source, action, target, detail) VALUES (?, ?, ?, ?, ?)`, time.Now().Unix(), source, action, target, detail); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM moderation_log WHERE id <= (SELECT MAX(id) FROM moderation_log) - ?`, maxLogged)
+	return err
+}
+
+// RecentActions devuelve las últimas `limit` acciones, la más reciente primero.
+func (s *Store) RecentActions(limit int) []Action {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rows, err := s.db.Query(`SELECT id, ts, source, action, target, detail FROM moderation_log ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return []Action{}
+	}
+	defer rows.Close()
+	out := []Action{}
+	for rows.Next() {
+		var a Action
+		if rows.Scan(&a.ID, &a.T, &a.Source, &a.Action, &a.Target, &a.Detail) == nil {
+			out = append(out, a)
+		}
+	}
+	return out
 }

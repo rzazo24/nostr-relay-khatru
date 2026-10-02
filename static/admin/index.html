@@ -164,6 +164,12 @@
         </div>
       </section>
 
+      <section class="panel" id="audit-panel">
+        <h2>Historial de acciones <button type="button" class="q" data-help="h-audit" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <p class="muted small">Lo que se ha hecho en el relé como dueño: baneos, vetos, reglas, cambios de información e inicios de sesión. Las últimas 100 (se guardan 1 000).</p>
+        <div class="scroll"><table id="audit"><thead><tr><th>Cuándo</th><th>Acción</th><th>Objetivo</th><th>Nota</th><th>Desde</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
       <section class="panel">
         <h2>Configuración <button type="button" class="q" data-help="h-config" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <dl id="config" class="kv"></dl>
@@ -187,6 +193,7 @@
         <a href="#h-recent">Eventos recientes</a>
         <a href="#h-search">Buscar</a>
         <a href="#h-moderation">Moderación</a>
+        <a href="#h-audit">Historial de acciones</a>
         <a href="#h-config">Configuración</a>
         <a href="#h-session">Cabecera y sesión</a>
         <a href="#h-glossary">Glosario</a>
@@ -200,6 +207,8 @@
           <dt>Últimas 24 h</dt><dd>Cuántos de los eventos guardados tienen fecha de las últimas 24 horas.</dd>
           <dt>Base de datos</dt><dd>Lo que ocupa en disco el archivo donde se guardan los eventos (incluye su registro temporal de escritura).</dd>
           <dt>Conexiones abiertas</dt><dd>Clientes conectados en este momento. Una misma app puede abrir varias conexiones, así que no equivale exactamente a personas.</dd>
+          <dt>Disco usado</dt><dd>Qué parte del disco del servidor está ocupada (la del disco donde vive la base de datos) y cuánto queda libre. Se pone en rojo a partir del 85 %: conviene hacer sitio antes de que se llene.</dd>
+          <dt>Última copia de seguridad</dt><dd>Cuándo se hizo la copia más reciente de la base de datos, cuánto pesa y cuántas hay guardadas. Solo aparece si el relé sabe dónde están las copias (variable <code>RELAY_BACKUP_DIR</code>). Se pone en rojo si la última tiene más de 36 horas o no hay ninguna: la copia automática se hace cada noche.</dd>
           <dt>Rechazos desde el arranque</dt><dd>Publicaciones y consultas que el relé ha rechazado desde que se inició. Se pone a cero cuando el relé se reinicia. Un número alto no es malo por sí mismo: suele ser tráfico ajeno frenado por los límites de velocidad (mira «Rechazos»).</dd>
         </dl>
       </section>
@@ -322,6 +331,19 @@
           <dt>Información del relé</dt><dd>Lo que anuncia el relé y muestran los clientes y la página de presentación: nombre, descripción, icono, <b>contacto</b> (un correo, un NIP-05 o un npub; es público), <b>etiquetas</b> (por ejemplo «general, open», las usan los directorios de relés para clasificarlo), <b>idiomas</b> (códigos como «en, es») y <b>normas de uso</b> (una dirección https). Para que la descripción salga en dos idiomas, escríbela como <code>English text | Texto en español</code>. «Restaurar» vuelve a los valores de la configuración (los del archivo <code>.env</code>). Los campos que cambias aquí tienen una marca «cambiado» y mandan sobre el <code>.env</code> hasta que restauras. El icono puede ser una dirección <code>https://…</code> o una ruta como <code>/icon.png</code>; vacío = sin icono.</dd>
         </dl>
         <p>Cada acción deja una línea en el registro del relé (<code>admin action=…</code>), con solo los 8 primeros caracteres de la clave o del evento.</p>
+      </section>
+
+      <section id="h-audit">
+        <h3>Historial de acciones</h3>
+        <p>Un registro de lo que has hecho como dueño, para acordarte de por qué algo está bloqueado. Se guarda en la base de datos del relé, así que sobrevive a reinicios; se conservan las últimas 1 000 y aquí ves las 100 más recientes.</p>
+        <dl>
+          <dt>Cuándo</dt><dd>Fecha y hora, en tu hora local.</dd>
+          <dt>Acción</dt><dd>Qué se hizo: banear o quitar el baneo de una clave o un evento, permitir o quitar de la lista blanca, reglas de tipos, bloqueo de IPs, cambios en la información del relé y <b>inicios y cierres de sesión</b> del panel (útil para ver si alguien más ha entrado).</dd>
+          <dt>Objetivo</dt><dd>A qué afectó: una clave o un evento (se enseñan abreviados; pasa el ratón por encima para ver el completo), una IP o un tipo de evento.</dd>
+          <dt>Nota</dt><dd>El motivo que escribiste, o en los cambios de información, qué campos se cambiaron o restauraron (nunca el contenido nuevo).</dd>
+          <dt>Desde</dt><dd><b>panel</b> si lo hiciste aquí, o <b>NIP-86</b> si fue con un cliente de administración. Los dos quedan anotados.</dd>
+        </dl>
+        <p>No registra quién eres (solo el dueño puede hacerlo) ni las acciones que fallaron o fueron rechazadas.</p>
       </section>
 
       <section id="h-config">

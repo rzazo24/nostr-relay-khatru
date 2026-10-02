@@ -23,8 +23,12 @@ services:
     environment:
       RELAY_DB_PATH: /app/data/relay.sqlite
       RELAY_LISTEN_ADDR: ":3334"
+      # Solo si defines BACKUP_DIR en .env: el panel enseña la fecha de la última copia de seguridad.
+      RELAY_BACKUP_DIR: ${BACKUP_DIR:+/backups}
     volumes:
       - relay-data:/app/data
+      # La carpeta de las copias (la misma donde las deja scripts/backup-db.sh), en solo lectura.
+      - ${BACKUP_DIR:-./backups}:/backups:ro
     networks:
       - internal
     healthcheck:

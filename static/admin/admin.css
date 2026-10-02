@@ -22,7 +22,7 @@ button:hover { border-color:var(--accent); } button.primary { background:var(--a
 button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
 .msg { min-height:1.4em; margin:10px 0 0; color:var(--muted); } .msg.err { color:#ff8a9b; }
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:16px; }
 .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
 .card .v { font-size:1.5rem; font-weight:700; } .card .l { color:var(--muted); font-size:.85rem; }
 .cols { display:grid; grid-template-columns:1fr; gap:0 16px; }
@@ -108,3 +108,5 @@ button.chipbtn { padding:1px 8px; border-radius:999px; font-size:.8rem; }
 td .pk { cursor:pointer; }
 
 #noisy td:last-child { white-space:nowrap; text-align:right; } #noisy .act { margin-left:4px; }
+.card .s { color:var(--muted); font-size:.75rem; margin-top:2px; } .card .v.warn { color:#ff8a9b; }
+#audit td:nth-child(1) { white-space:nowrap; } #audit td:nth-child(5) { color:var(--muted); }

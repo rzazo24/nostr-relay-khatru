@@ -36,6 +36,10 @@ export async function startStack(extraEnv = {}) {
   const ownerPk = getPublicKey(ownerSecret)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panel-e2e-'))
   const dbPath = path.join(dir, 'relay.sqlite')
+  const backupDir = path.join(dir, 'backups')
+  fs.mkdirSync(backupDir)
+  const backupFile = path.join(backupDir, 'nostr-relay-khatru-20261001T031701Z.sqlite.gz')
+  fs.writeFileSync(backupFile, Buffer.alloc(2048)) // una copia «reciente» de mentira
   const relayPort = await freePort()
   const panelPort = await freePort()
 
@@ -46,7 +50,7 @@ export async function startStack(extraEnv = {}) {
       RELAY_NAME: 'Relé de pruebas', RELAY_DESCRIPTION: 'Descripción original',
       // límites de velocidad altos: las pruebas publican muchos eventos seguidos
       RELAY_EVENTS_PER_MINUTE: '1000000', RELAY_EVENTS_BURST: '1000000', RELAY_REQS_PER_MINUTE: '1000000', RELAY_REQS_BURST: '1000000', RELAY_CONNS_PER_MINUTE: '1000000', RELAY_CONNS_BURST: '1000000',
-      RELAY_MAX_CONTENT_LENGTH: '200', RELAY_RETENTION_DAYS: '180',
+      RELAY_MAX_CONTENT_LENGTH: '200', RELAY_RETENTION_DAYS: '180', RELAY_BACKUP_DIR: backupDir,
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -86,7 +90,7 @@ export async function startStack(extraEnv = {}) {
   }
 
   return {
-    ownerSecret, ownerPk, dbPath,
+    ownerSecret, ownerPk, dbPath, backupFile,
     relayWs: `ws://127.0.0.1:${relayPort}`, relayHttp, panelUrl: `http://127.0.0.1:${panelPort}/admin/`,
     log: () => relayLog,
     async stop() {

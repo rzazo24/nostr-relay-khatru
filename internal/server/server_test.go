@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip77"
 
 	"github.com/rzazo24/nostr-relay-khatru/internal/config"
+	"github.com/rzazo24/nostr-relay-khatru/internal/moderation"
 )
 
 // start levanta un relé real (SQLite en un directorio temporal) tras un servidor HTTP
@@ -1388,5 +1390,108 @@ func TestAdminStats_NoisyKeysFromRealRejections(t *testing.T) {
 	}
 	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", ""); res.StatusCode != 401 {
 		t.Fatal("sin sesión no se enseñan las claves completas")
+	}
+}
+
+func TestAdminHistory_RecordsPanelAndNIP86Actions(t *testing.T) {
+	owner, spammer, other := newKeys(), newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	cookie := adminLogin(t, ts, owner)
+	adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": spammer.pk, "reason": "spam de prueba"}, nil)
+	adminPost(t, ts, cookie, "ip", map[string]any{"ip": "203.0.113.7", "action": "block", "reason": "scraper"}, nil)
+	adminPost(t, ts, cookie, "kind", map[string]any{"kind": 7, "rule": "disallow"}, nil)
+	adminPost(t, ts, cookie, "info", map[string]any{"tags": "a,b", "contact": "x@y.z"}, nil)
+	adminPost(t, ts, cookie, "unban-pubkey", map[string]any{"pubkey": spammer.pk}, nil)
+	adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": strings.Repeat("0", 64)}, nil)
+	adminPost(t, ts, cookie, "ban-pubkey", map[string]any{"pubkey": owner.pk}, nil) // rechazada: no debe anotarse
+	// por NIP-86 (como lo haría un cliente de administración)
+	manage(t, ts, owner, "banpubkey", other.pk, "desde nip86")
+
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	hist := lists["history"].([]any)
+	type row struct{ source, action, target, detail string }
+	var got []row
+	for _, h := range hist {
+		m := h.(map[string]any)
+		got = append(got, row{m["source"].(string), m["action"].(string), m["target"].(string), m["detail"].(string)})
+	}
+	has := func(r row) bool {
+		for _, g := range got {
+			if g == r {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []row{
+		{"panel", "login", "", ""},
+		{"panel", "ban-pubkey", spammer.pk, "spam de prueba"},
+		{"panel", "ip-block", "203.0.113.7", "scraper"},
+		{"panel", "kind-disallow", "7", ""},
+		{"panel", "info", "", "cambiados: contacto, etiquetas"},
+		{"panel", "unban-pubkey", spammer.pk, ""},
+		{"nip86", "ban-pubkey", other.pk, "desde nip86"},
+	} {
+		if !has(want) {
+			t.Fatalf("falta en el historial %+v\nhay: %+v", want, got)
+		}
+	}
+	if len(got) != 8 { // 7 anteriores + la del ban de la clave 000…; la rechazada del dueño no cuenta
+		t.Fatalf("se esperaban 8 entradas y hay %d: %+v", len(got), got)
+	}
+	if hist[0].(map[string]any)["source"] != "nip86" {
+		t.Fatalf("la más reciente va primero: %v", hist[0])
+	}
+}
+
+func TestModerationLog_KeepsOnlyTheLatest(t *testing.T) {
+	st, err := moderation.Open(filepath.Join(t.TempDir(), "m.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for i := 0; i < 1100; i++ {
+		st.LogAction("panel", "ban-event", fmt.Sprintf("%064x", i), "")
+	}
+	all := st.RecentActions(5000)
+	if len(all) != 1000 || all[0].Target != fmt.Sprintf("%064x", 1099) || all[len(all)-1].Target != fmt.Sprintf("%064x", 100) {
+		t.Fatalf("se conservan las 1000 últimas: %d, primera %s", len(all), all[0].Target[56:])
+	}
+}
+
+func TestAdminStats_ServerStatusDiskAndBackups(t *testing.T) {
+	owner := newKeys()
+	dir := t.TempDir()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_BACKUP_DIR": dir})
+	cookie := adminLogin(t, ts, owner)
+	status := func() map[string]any {
+		_, stats := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+		return stats["server"].(map[string]any)
+	}
+	st := status()
+	if st["diskTotal"].(float64) <= 0 || st["diskFree"].(float64) <= 0 || st["diskFree"].(float64) > st["diskTotal"].(float64) {
+		t.Fatalf("disco: %v", st)
+	}
+	b := st["backup"].(map[string]any)
+	if b["configured"] != true || b["count"] != float64(0) || b["last"] != float64(0) {
+		t.Fatalf("sin copias: %v", b)
+	}
+	old, recent := filepath.Join(dir, "nostr-relay-khatru-20260101T000000Z.sqlite.gz"), filepath.Join(dir, "nostr-relay-khatru-20260102T000000Z.sqlite.gz")
+	os.WriteFile(old, []byte("a"), 0o644)
+	os.WriteFile(recent, []byte("bbb"), 0o644)
+	os.WriteFile(filepath.Join(dir, "otra-cosa.txt"), []byte("x"), 0o644) // no cuenta
+	os.Chtimes(old, time.Unix(1700000000, 0), time.Unix(1700000000, 0))
+	os.Chtimes(recent, time.Unix(1800000000, 0), time.Unix(1800000000, 0))
+	_, stats := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie) // la caché de estadísticas puede tardar; el estado del servidor se calcula siempre
+	b = stats["server"].(map[string]any)["backup"].(map[string]any)
+	if b["count"] != float64(2) || b["last"] != float64(1800000000) || b["lastBytes"] != float64(3) {
+		t.Fatalf("copias: %v", b)
+	}
+	// sin RELAY_BACKUP_DIR no se enseña nada de copias
+	_, ts2 := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	cookie2 := adminLogin(t, ts2, owner)
+	_, stats2 := adminCall(t, ts2, "GET", "/admin/api/stats", "", cookie2)
+	if stats2["server"].(map[string]any)["backup"].(map[string]any)["configured"] != false {
+		t.Fatal("sin RELAY_BACKUP_DIR las copias no están configuradas")
 	}
 }

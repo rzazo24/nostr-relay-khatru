@@ -127,6 +127,13 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**Action history** (`moderation_log` table, `Store.LogAction/RecentActions`, `Panel.record`): every panel action and every NIP-86
+mutation (wrapped by `audited` in `setupManagementAPI`) stores ts/source/action/target(full)/detail (the owner's own note; for relay-info
+only the *names* of the fields touched). Panel logins are logged; logout only when a session existed (the endpoint is unauthenticated).
+The stdout log line stays the old privacy-preserving one (8-char target, no note, no IP). Kept to the last 1 000 rows.
+**Server status** (`admin/serverstatus.go`): `Statfs` of the DB directory + newest `nostr-relay-khatru-*.sqlite.gz` in `RELAY_BACKUP_DIR`;
+compose bind-mounts `${BACKUP_DIR}` read-only to `/backups` and only sets the env when `BACKUP_DIR` is defined in `.env`.
+
 **Noisy keys** (`activityLog.noisy`, `admin.NoisyKey`, `GET /admin/api/stats` → `activity.noisy`): per-*full*-pubkey counters of
 rejected **events** (not filters), memory only, ≤1 000 keys (`pruneNoisyLocked` drops stale >24 h, then the quieter half), never
 logged or persisted. This is the one place the panel shows third parties' full keys (still never IPs); the log/recent-rejections

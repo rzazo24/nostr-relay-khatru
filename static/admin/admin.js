@@ -495,16 +495,28 @@ function searchButton(text) {
   return b
 }
 
+// Una búsqueda nueva desde un botón (una clave, un tipo…) parte sin fechas.
 async function searchFor(q, kind) {
-  $('f-search').elements.q.value = q
-  $('f-search').elements.kind.value = kind
-  await runSearch({ q, kind }, false)
+  const f = $('f-search').elements
+  f.q.value = q
+  f.kind.value = kind
+  f.from.value = ''
+  f.to.value = ''
+  await runSearch({ q, kind, from: '', to: '' }, false)
 }
+
+// 'AAAA-MM-DD' (la fecha del <input type=date>) a segundos unix: el principio o el final de ese día en la hora local.
+const dayStart = (v) => Math.floor(new Date(`${v}T00:00:00`).getTime() / 1000)
+const dayEnd = (v) => Math.floor(new Date(`${v}T23:59:59`).getTime() / 1000)
+const niceDay = (v) => v.split('-').reverse().join('/')
+const isoDay = (d) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`
 
 async function runSearch(st, append) {
   const out = $('search-out')
   const params = new URLSearchParams({ q: st.q || '' })
   if (st.kind !== '' && st.kind != null) params.set('kind', String(st.kind))
+  if (st.from) params.set('since', String(dayStart(st.from)))
+  if (st.to) params.set('until', String(dayEnd(st.to)))
   if (append && st.next) params.set('next', st.next)
   let res
   try {
@@ -513,12 +525,12 @@ async function runSearch(st, append) {
   if (res.status === 401) { stop(); show('login'); return }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) { toast(data.error || `error ${res.status}`, true); return }
-  searchState = { q: st.q, kind: st.kind, next: data.next || '' }
+  searchState = { q: st.q, kind: st.kind, from: st.from || '', to: st.to || '', next: data.next || '' }
   const now = Math.floor(Date.now() / 1000)
   if (!append) out.replaceChildren()
 
   if (!append) {
-    out.append(el('p', { class: 'resultinfo', text: `${data.totalExact ? fmt(data.total) : `más de ${fmt(data.total)}`} resultado(s): ${data.what}` }))
+    out.append(el('p', { class: 'resultinfo', text: `${data.totalExact ? fmt(data.total) : `más de ${fmt(data.total)}`} resultado(s): ${data.what}${rangeText(st)}` }))
     if (data.key) out.append(keyCard(data.key))
     out.append(el('ul', { class: 'recent', id: 'search-list' }))
     if (!data.events.length) out.append(el('p', { class: 'muted', text: 'No hay eventos que coincidan.' }))
@@ -533,9 +545,16 @@ async function runSearch(st, append) {
   }
 }
 
+function rangeText(st) {
+  if (st.from && st.to) return st.from === st.to ? ` · el ${niceDay(st.from)}` : ` · del ${niceDay(st.from)} al ${niceDay(st.to)}`
+  if (st.from) return ` · desde el ${niceDay(st.from)}`
+  if (st.to) return ` · hasta el ${niceDay(st.to)}`
+  return ''
+}
+
 // Repite la búsqueda activa (desde la primera página), por ejemplo tras vetar o banear.
 async function refreshSearch() {
-  if (searchState) await runSearch({ q: searchState.q, kind: searchState.kind }, false)
+  if (searchState) await runSearch({ q: searchState.q, kind: searchState.kind, from: searchState.from, to: searchState.to }, false)
 }
 
 function keyCard(k) {
@@ -578,8 +597,17 @@ function keyCard(k) {
 $('f-search').addEventListener('submit', (ev) => {
   ev.preventDefault()
   const f = ev.currentTarget
-  runSearch({ q: f.elements.q.value.trim(), kind: f.elements.kind.value.trim() }, false)
+  if (f.elements.from.value && f.elements.to.value && f.elements.from.value > f.elements.to.value) { toast('«Desde» no puede ser posterior a «Hasta»', true); return }
+  runSearch({ q: f.elements.q.value.trim(), kind: f.elements.kind.value.trim(), from: f.elements.from.value, to: f.elements.to.value }, false)
 })
+document.querySelectorAll('#f-search .presets [data-days]').forEach((b) => b.addEventListener('click', () => {
+  const f = $('f-search').elements
+  const today = new Date()
+  const start = new Date(today)
+  start.setDate(start.getDate() - (Number(b.dataset.days) - 1))
+  f.from.value = isoDay(start)
+  f.to.value = isoDay(today)
+}))
 $('search-clear').addEventListener('click', () => { $('f-search').reset(); $('search-out').replaceChildren(); searchState = null })
 
 // ---------- ayuda ----------

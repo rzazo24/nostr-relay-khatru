@@ -150,7 +150,7 @@ only overridden when a setting exists, because khatru has already resolved a rel
 **Search** (`internal/admin/search.go`, `GET /admin/api/search?q=&kind=&next=`): `planSearch` decides what `q` is (npub/nprofile →
 author; note1/nevent1 → id; 64 hex → author OR id (and shows a key summary); 6–63 hex → prefix of pubkey OR id; ≤5 digits → kind;
 otherwise `content LIKE` with `%`/`_`/`\` escaped). **Text search excludes private kinds (4, 13, 14, 1059) in SQL and never
-returns their content** (tested). Pagination is a `created_at:id` cursor (`created_at < ? OR (=? AND id < ?)`), 50 per page; the
+returns their content** (tested). Optional `since`/`until` (unix seconds, inclusive, `since ≤ until`, validated) are ANDed into the WHERE; the frontend turns the `<input type=date>` days into local start/end-of-day. Pagination is a `created_at:id` cursor (`created_at < ? OR (=? AND id < ?)`), 50 per page; the
 total is `COUNT(*)` over a `LIMIT 10001` subquery (so "más de 10 000"). The key summary comes only with the first page and
 only when the query reduces to one full key. It's a scan with `LIKE` — fine at this scale; revisit (FTS5) if the table gets huge.
 Frontend: `eventItem()` is shared by *recent* and *search* rows; after any moderation action `act()` calls `refreshSearch()` so a

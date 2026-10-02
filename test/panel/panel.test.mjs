@@ -487,6 +487,67 @@ describe('panel de control', () => {
     await ctx.close()
   })
 
+  it('búsqueda con rango de fechas: desde, hasta, ambos, botones rápidos, validación y limpiar', async () => {
+    const who = newKey()
+    const day = 86400
+    await pub(who.sk, 1, 'rango marca-fechas vieja', [], 10 * day)
+    await pub(who.sk, 1, 'rango marca-fechas media', [], 5 * day)
+    await pub(who.sk, 1, 'rango marca-fechas reciente', [], 1 * day)
+    const { ctx, page } = await openPanel()
+    await login(page)
+    const iso = (n) => page.evaluate((k) => { const d = new Date(); d.setDate(d.getDate() - k); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }, n)
+    const run = async (from, to, q = 'marca-fechas') => {
+      await page.fill('#f-search [name=q]', q)
+      await page.fill('#f-search [name=kind]', '')
+      await page.fill('#f-search [name=from]', from)
+      await page.fill('#f-search [name=to]', to)
+      await page.click('#f-search button[type=submit]')
+      await page.waitForFunction(() => document.querySelector('#search-out .resultinfo'), null, { timeout: 8000 })
+      await sleep(250)
+      return (await page.innerText('#search-out .resultinfo')).replace(/\s+/g, ' ')
+    }
+    assert.match(await run('', ''), /^3 resultado/, 'sin fechas salen las 3')
+    const d7 = await iso(7), d2 = await iso(2)
+    assert.match(await run(d7, ''), /^2 resultado\(s\):.*desde el \d\d\/\d\d\/\d{4}$/, 'desde hace 7 días: la media y la reciente')
+    assert.match(await run('', d7), /^1 resultado\(s\):.*hasta el /, 'hasta hace 7 días: la vieja')
+    const both = await run(d7, d2)
+    assert.match(both, /^1 resultado\(s\):.* · del \d\d\/\d\d\/\d{4} al \d\d\/\d\d\/\d{4}$/, 'entre hace 7 y 2 días: la media')
+    assert.ok((await page.innerText('#search-list')).includes('media'))
+    const day1 = await iso(1)
+    assert.match(await run(day1, day1), /^1 resultado\(s\):.* · el \d\d\/\d\d\/\d{4}$/, 'un solo día completo')
+
+    // sin texto, el rango sirve para ver lo publicado en un periodo
+    assert.match(await run(d7, d2, ''), /resultado\(s\): todos los eventos · del /)
+
+    // botones rápidos
+    await page.click('#f-search [data-days="7"]')
+    assert.equal(await page.inputValue('#f-search [name=from]'), await iso(6), '7 días = hoy y los 6 anteriores')
+    assert.equal(await page.inputValue('#f-search [name=to]'), await iso(0))
+    await page.fill('#f-search [name=q]', 'marca-fechas')
+    await page.click('#f-search button[type=submit]')
+    await page.waitForFunction(() => /^2 resultado/.test(document.querySelector('#search-out .resultinfo')?.textContent || ''), null, { timeout: 8000 })
+    await page.click('#f-search [data-days="1"]')
+    assert.equal(await page.inputValue('#f-search [name=from]'), await iso(0))
+    await page.click('#f-search button[type=submit]')
+    await page.waitForFunction(() => /^0 resultado/.test(document.querySelector('#search-out .resultinfo')?.textContent || ''), null, { timeout: 8000 })
+
+    // «Desde» posterior a «Hasta»: se avisa sin buscar
+    await page.fill('#f-search [name=from]', d2)
+    await page.fill('#f-search [name=to]', d7)
+    await clearToast(page)
+    await page.click('#f-search button[type=submit]')
+    assert.match(await toast(page), /no puede ser posterior/)
+
+    // las búsquedas que lanzan otros botones parten sin fechas, y «Limpiar» las borra
+    await page.fill('#f-search [name=from]', d7)
+    await page.click('#f-search button[type=submit]')
+    await sleep(300)
+    await page.click('#search-clear')
+    assert.equal(await page.inputValue('#f-search [name=from]'), '')
+    assert.equal(await page.locator('#search-out *').count(), 0)
+    await ctx.close()
+  })
+
   it('no hubo errores de consola ni violaciones de la política de contenido en todo el recorrido', () => {
     assert.deepEqual(consoleErrors, [], `errores en la consola del navegador:\n${consoleErrors.join('\n')}`)
   })

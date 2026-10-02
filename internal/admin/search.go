@@ -131,6 +131,29 @@ func (p *Panel) search(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Rango de fechas opcional (segundos unix, ambos extremos incluidos). El panel manda el principio y el final de
+	// los días elegidos en la hora local del navegador.
+	var since, until int64 = -1, -1
+	for name, dst := range map[string]*int64{"since": &since, "until": &until} {
+		if v := strings.TrimSpace(r.URL.Query().Get(name)); v != "" {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || n < 0 || n > 1<<40 {
+				fail(w, http.StatusBadRequest, name+" must be a unix timestamp in seconds")
+				return
+			}
+			*dst = n
+		}
+	}
+	if since >= 0 && until >= 0 && since > until {
+		fail(w, http.StatusBadRequest, "since must not be after until")
+		return
+	}
+	if since >= 0 {
+		pl.where, pl.args = append(pl.where, "created_at >= ?"), append(pl.args, since)
+	}
+	if until >= 0 {
+		pl.where, pl.args = append(pl.where, "created_at <= ?"), append(pl.args, until)
+	}
 
 	where := strings.Join(pl.where, " AND ")
 	if where == "" {

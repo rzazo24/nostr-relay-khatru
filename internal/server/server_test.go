@@ -1572,3 +1572,62 @@ func TestAdminBackup_DownloadsAConsistentGzippedCopy(t *testing.T) {
 		t.Fatalf("cross-site debe dar 403, dio %d", res2.StatusCode)
 	}
 }
+
+func TestAdminSearch_DateRange(t *testing.T) {
+	owner, ana := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk})
+	r := connect(t, ts)
+	cookie := adminLogin(t, ts, owner)
+	day := int64(86400)
+	base := time.Now().Unix()
+	at := func(daysAgo int64, content string) nostr.Event {
+		ev := nostr.Event{Kind: 1, Content: content, CreatedAt: nostr.Timestamp(base - daysAgo*day), PubKey: ana.pk}
+		ev.Sign(ana.sk)
+		if err := publish(r, ev); err != nil {
+			t.Fatal(err)
+		}
+		return ev
+	}
+	old, mid, recent := at(10, "vieja marca"), at(5, "media marca"), at(1, "reciente marca")
+	total := func(q string) (float64, []string) {
+		code, body := searchCall(t, ts, cookie, q)
+		if code != 200 {
+			t.Fatalf("%s → %d %v", q, code, body)
+		}
+		return body["total"].(float64), searchIDs(body)
+	}
+	k := "q=" + ana.pk
+	if n, _ := total(k); n != 3 {
+		t.Fatalf("sin fechas: %v", n)
+	}
+	if n, ids := total(fmt.Sprintf("%s&since=%d", k, base-6*day)); n != 2 || ids[0] != recent.ID || ids[1] != mid.ID {
+		t.Fatalf("desde hace 6 días (media y reciente): %v %v", n, ids)
+	}
+	if n, ids := total(fmt.Sprintf("%s&until=%d", k, base-6*day)); n != 1 || ids[0] != old.ID {
+		t.Fatalf("hasta hace 6 días (solo la vieja): %v %v", n, ids)
+	}
+	if n, ids := total(fmt.Sprintf("%s&since=%d&until=%d", k, base-7*day, base-2*day)); n != 1 || ids[0] != mid.ID {
+		t.Fatalf("entre hace 7 y 2 días (solo la media): %v %v", n, ids)
+	}
+	// los extremos están incluidos
+	if n, _ := total(fmt.Sprintf("%s&since=%d&until=%d", k, mid.CreatedAt, mid.CreatedAt)); n != 1 {
+		t.Fatalf("since=until=created_at del evento lo incluye: %v", n)
+	}
+	// se combina con el texto y con el tipo, y funciona sin consulta
+	if n, _ := total(fmt.Sprintf("q=marca&since=%d", base-6*day)); n != 2 {
+		t.Fatalf("texto + fechas: %v", n)
+	}
+	if n, _ := total(fmt.Sprintf("kind=1&since=%d&until=%d", base-7*day, base-2*day)); n != 1 {
+		t.Fatalf("tipo + fechas sin texto: %v", n)
+	}
+	if n, _ := total(fmt.Sprintf("since=%d", base+day)); n != 0 {
+		t.Fatalf("un rango en el futuro no da nada: %v", n)
+	}
+	for name, q := range map[string]string{
+		"since no numérico": "since=ayer", "until negativo": "until=-5", "since > until": fmt.Sprintf("since=%d&until=%d", base, base-day),
+	} {
+		if code, _ := searchCall(t, ts, cookie, q); code != 400 {
+			t.Fatalf("%s debe dar 400, dio %d", name, code)
+		}
+	}
+}

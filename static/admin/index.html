@@ -89,6 +89,15 @@
         <form id="f-search" class="form searchform" autocomplete="off">
           <input name="q" maxlength="200" placeholder="npub…, clave o id (entero o sus primeros caracteres), número de tipo o texto" aria-label="Qué buscar">
           <input name="kind" type="number" min="0" max="65535" placeholder="tipo (opcional)" aria-label="Filtrar por tipo de evento" class="kindin">
+          <div class="daterow">
+            <label>Desde <input name="from" type="date" aria-label="Desde la fecha"></label>
+            <label>Hasta <input name="to" type="date" aria-label="Hasta la fecha"></label>
+            <span class="presets" role="group" aria-label="Rangos rápidos">
+              <button type="button" class="chipbtn" data-days="1">Hoy</button>
+              <button type="button" class="chipbtn" data-days="7">7 días</button>
+              <button type="button" class="chipbtn" data-days="30">30 días</button>
+            </span>
+          </div>
           <div class="btns"><button type="submit" class="primary">Buscar</button><button type="button" id="search-clear">Limpiar</button></div>
         </form>
         <div id="search-out" aria-live="polite"></div>
@@ -316,6 +325,7 @@
           <dt>Cualquier otro texto</dt><dd>Los eventos públicos cuyo contenido lo contiene (sin distinguir mayúsculas). Los <b>mensajes privados no se buscan</b> y nunca muestran su contenido.</dd>
           <dt>Nada (vacío)</dt><dd>Todos los eventos, del más nuevo al más viejo.</dd>
         </dl>
+        <p><b>Fechas:</b> «Desde» y «Hasta» (opcionales, cada una por separado) acotan cualquier búsqueda a ese periodo, contando los días completos en tu hora local; los botones «Hoy», «7 días» y «30 días» rellenan las dos de golpe. Sin texto de búsqueda sirven para ver qué se publicó en un periodo concreto. El resumen de una clave no se acota por fechas: cuenta todo lo suyo.</p>
         <p>Los resultados salen de 50 en 50 (botón «Cargar más») con el total arriba (se deja de contar en 10 000). En cada evento tienes <b>Vetar evento</b> y <b>Banear clave</b>, y pulsar una clave lanza la búsqueda de todo lo suyo. Cuando ves una clave, el resumen también permite banear, o quitar el baneo si ya lo está.</p>
         <p>La búsqueda solo lee: no cambia nada hasta que pulses una acción de moderación.</p>
       </section>

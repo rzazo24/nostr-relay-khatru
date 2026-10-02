@@ -110,3 +110,6 @@ td .pk { cursor:pointer; }
 #noisy td:last-child { white-space:nowrap; text-align:right; } #noisy .act { margin-left:4px; }
 .card .s { color:var(--muted); font-size:.75rem; margin-top:2px; } .card .v.warn { color:#ff8a9b; }
 #audit td:nth-child(1) { white-space:nowrap; } #audit td:nth-child(5) { color:var(--muted); }
+.daterow { display:flex; flex-wrap:wrap; gap:10px; align-items:center; flex:1 1 100%; color:var(--muted); font-size:.85rem; }
+.daterow label { display:flex; align-items:center; gap:6px; } .daterow input[type=date] { width:auto; color-scheme:dark; }
+.presets { display:flex; gap:6px; }

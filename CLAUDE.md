@@ -234,7 +234,7 @@ via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, de
 `RELAY_PUBLIC_URL`, `RELAY_PUBKEY` = the owner's key for NIP-86). `docker compose up -d --force-recreate relay`
 after editing `.env` (env_file is read when the container is created). A daily cron runs
 `scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`); the
-healthcheck script (pings healthchecks.io via `PING_URL`/`PING_FAIL_URL` set in the cron line — the ping URL is a secret, it lives only in the crontab, never in git) runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
+healthcheck script (pings healthchecks.io via `PING_URL`/`PING_FAIL_URL` set in the cron line; `PING_FAIL_URL` only fires after `ALERT_THRESHOLD`=2 consecutive failures so one blip doesn't email — the ping URL is a secret, it lives only in the crontab, never in git) runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
 `~/backups/nostr-relay-khatru/healthcheck.log`, only written on failures/recoveries).
 
 

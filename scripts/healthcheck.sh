@@ -14,8 +14,10 @@
 #   PING_URL          (opcional) URL a la que se avisa cuando el relé responde bien: un servicio de
 #                     monitorización tipo healthchecks.io la espera cada pocos minutos y te avisa si
 #                     DEJA de llegar (servidor caído, relé caído, cron parado...).
-#   PING_FAIL_URL     (opcional) URL a la que se avisa al detectar un fallo, para que te avise antes
-#                     de que venza el plazo (en healthchecks.io es la URL de ping + /fail).
+#   PING_FAIL_URL     (opcional) URL a la que se avisa de un fallo, para que te avise antes de que venza el
+#                     plazo (en healthchecks.io es la URL de ping + /fail). Solo se usa a partir de
+#                     ALERT_THRESHOLD fallos seguidos: un tropiezo aislado no manda ningún aviso.
+#   ALERT_THRESHOLD   fallos seguidos antes de avisar a PING_FAIL_URL (default: FAIL_THRESHOLD, o sea 2)
 #   STATE_DIR, LOG_FILE, COMPOSE_DIR, RESTART_CMD (default: "docker compose restart")
 
 set -uo pipefail
@@ -23,6 +25,7 @@ set -uo pipefail
 RELAY_URL="${RELAY_URL:?define RELAY_URL (por ejemplo https://relay.example.com)}"
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-2}"
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-600}"
+ALERT_THRESHOLD="${ALERT_THRESHOLD:-$FAIL_THRESHOLD}"
 STATE_DIR="${STATE_DIR:-$HOME/.local/state/nostr-relay-khatru-health}"
 LOG_FILE="${LOG_FILE:-$HOME/backups/nostr-relay-khatru/healthcheck.log}"
 COMPOSE_DIR="${COMPOSE_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -60,7 +63,7 @@ fi
 fails=$((fails + 1))
 echo "$fails" > "$STATE_DIR/fails"
 log "el relé NO responde ($fails/$FAIL_THRESHOLD)"
-ping "$PING_FAIL_URL"
+[ "$fails" -ge "$ALERT_THRESHOLD" ] && ping "$PING_FAIL_URL"
 [ "$fails" -ge "$FAIL_THRESHOLD" ] || exit 0
 
 now="$(date +%s)"

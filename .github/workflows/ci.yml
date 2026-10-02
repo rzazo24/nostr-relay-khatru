@@ -105,4 +105,12 @@ jobs:
         working-directory: test/panel
         env:
           RELAY_BIN: ../../nostr-relay-khatru
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee "$RUNNER_TEMP/panel-test.log"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # los fallos salen también como anotaciones del CI (visibles sin abrir el log)
+            grep -E "^\s*not ok|error:|The input did not|Expected|actual:|expected:|Timeout|message:" "$RUNNER_TEMP/panel-test.log" | head -25 | while IFS= read -r l; do echo "::error::${l:0:300}"; done
+          fi
+          exit "$status"

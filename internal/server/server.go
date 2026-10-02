@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,10 @@ const (
 	settingName        = admin.SettingName
 	settingDescription = admin.SettingDescription
 	settingIcon        = admin.SettingIcon
+	settingContact     = admin.SettingContact
+	settingTags        = admin.SettingTags
+	settingLanguages   = admin.SettingLanguages
+	settingPolicy      = admin.SettingPolicy
 )
 
 // Server es el relé ya montado. Relay implementa http.Handler.
@@ -180,7 +185,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		Store:        store,
 		Effects:      s,
 		Info:         s.effectiveInfo,
-		InfoDefaults: admin.InfoView{Name: cfg.Name, Description: cfg.Description, Icon: cfg.Icon},
+		InfoDefaults: infoFromConfig(cfg),
 		Log:          s.act.Admin,
 		Stats:        statsStore,
 		Connections:  s.conns.Load,
@@ -309,15 +314,12 @@ func (s *Server) setupInfo(version string) {
 
 	s.Relay.OverwriteRelayInformation = append(s.Relay.OverwriteRelayInformation,
 		func(ctx context.Context, r *http.Request, in nip11.RelayInformationDocument) nip11.RelayInformationDocument {
-			if v, ok := s.Store.Setting(settingName); ok {
-				in.Name = v
+			v := s.effectiveInfo()
+			in.Name, in.Description, in.Contact = v.Name, v.Description, v.Contact
+			if _, changed := s.Store.Setting(settingIcon); changed { // si no, se deja el que khatru ya resolvió contra la URL pública
+				in.Icon = v.Icon
 			}
-			if v, ok := s.Store.Setting(settingDescription); ok {
-				in.Description = v
-			}
-			if v, ok := s.Store.Setting(settingIcon); ok {
-				in.Icon = v
-			}
+			in.Tags, in.LanguageTags, in.PostingPolicy = v.Tags, v.Languages, v.PostingPolicy
 			// Copia: no se toca el documento compartido, que es de todas las peticiones.
 			lim := *in.Limitation
 			lim.RestrictedWrites = s.Store.HasAllowlist()
@@ -463,10 +465,27 @@ func (s *Server) DeleteEventsByAuthor(ctx context.Context, pubkey string, max in
 	return n, nil
 }
 
-// effectiveInfo es el nombre, la descripción y el icono que anuncia NIP-11 ahora mismo
-// (el cambio en caliente de NIP-86 o del panel, o si no lo hay, el de la configuración).
+// infoFromConfig es la información del relé tal como la fija la configuración (RELAY_*).
+func infoFromConfig(cfg config.Config) admin.InfoView {
+	return admin.InfoView{Name: cfg.Name, Description: cfg.Description, Icon: cfg.Icon, Contact: cfg.Contact,
+		Tags: cfg.Tags, Languages: cfg.Languages, PostingPolicy: cfg.PostingPolicy}
+}
+
+// splitList separa una lista guardada como "a,b,c" (vacía = ninguna).
+func splitList(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// effectiveInfo es la información que anuncia NIP-11 ahora mismo (el cambio en caliente de NIP-86 o del
+// panel, o si no lo hay, el de la configuración).
 func (s *Server) effectiveInfo() admin.InfoView {
-	v := admin.InfoView{Name: s.cfg.Name, Description: s.cfg.Description, Icon: s.cfg.Icon}
+	v := infoFromConfig(s.cfg)
 	if x, ok := s.Store.Setting(settingName); ok {
 		v.Name = x
 	}
@@ -475,6 +494,18 @@ func (s *Server) effectiveInfo() admin.InfoView {
 	}
 	if x, ok := s.Store.Setting(settingIcon); ok {
 		v.Icon = x
+	}
+	if x, ok := s.Store.Setting(settingContact); ok {
+		v.Contact = x
+	}
+	if x, ok := s.Store.Setting(settingTags); ok {
+		v.Tags = splitList(x)
+	}
+	if x, ok := s.Store.Setting(settingLanguages); ok {
+		v.Languages = splitList(x)
+	}
+	if x, ok := s.Store.Setting(settingPolicy); ok {
+		v.PostingPolicy = x
 	}
 	return v
 }

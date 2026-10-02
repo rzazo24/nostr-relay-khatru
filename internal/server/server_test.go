@@ -1321,3 +1321,72 @@ func TestNIP11AdvertisesDirectoryFields(t *testing.T) {
 		t.Fatalf("NIP-11: %+v", doc)
 	}
 }
+
+func TestAdminMod_ContactTagsLanguagesAndPolicy(t *testing.T) {
+	owner := newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_CONTACT": "a@b.c", "RELAY_TAGS": "general", "RELAY_LANGUAGES": "en"})
+	cookie := adminLogin(t, ts, owner)
+	_, lists := adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	info := lists["info"].(map[string]any)
+	if info["contact"] != "a@b.c" || len(info["tags"].([]any)) != 1 || info["postingPolicy"] != "" {
+		t.Fatalf("al principio salen los de la configuración: %v", info)
+	}
+	for name, body := range map[string]map[string]any{
+		"idioma inválido":   {"languages": "en, no es"},
+		"demasiadas":        {"tags": "a,b,c,d,e,f,g,h,i,j,k,l,m"},
+		"política no https": {"postingPolicy": "http://x.example/normas"},
+		"etiqueta larga":    {"tags": strings.Repeat("x", 40)},
+		"lista no válida":   {"tags": 5},
+	} {
+		if code, _ := adminPost(t, ts, cookie, "info", body, nil); code != 400 {
+			t.Fatalf("%s debe rechazarse (400), dio %d", name, code)
+		}
+	}
+	code, out := adminPost(t, ts, cookie, "info", map[string]any{"contact": "raul@example.com", "tags": " general, open ,General,, es ", "languages": "en, es", "postingPolicy": "https://example.com/normas"}, nil)
+	if code != 200 {
+		t.Fatalf("info: %d %v", code, out)
+	}
+	doc := nip11Doc(t, ts)
+	tags, langs := doc["tags"].([]any), doc["language_tags"].([]any)
+	if doc["contact"] != "raul@example.com" || len(tags) != 3 || tags[1] != "open" || len(langs) != 2 || doc["posting_policy"] != "https://example.com/normas" {
+		t.Fatalf("NIP-11 tras el cambio (sin repetidos ni vacíos): %v", doc)
+	}
+	// vaciar de verdad una lista (y el contacto) es un cambio válido
+	if code, _ := adminPost(t, ts, cookie, "info", map[string]any{"tags": "", "contact": ""}, nil); code != 200 {
+		t.Fatal("vaciar etiquetas y contacto es válido")
+	}
+	if d := nip11Doc(t, ts); d["tags"] != nil || d["contact"] != "" {
+		t.Fatalf("tras vaciar: %v %v", d["tags"], d["contact"])
+	}
+	adminPost(t, ts, cookie, "info", map[string]any{"reset": []any{"contact", "tags", "languages", "postingPolicy"}}, nil)
+	d := nip11Doc(t, ts)
+	if d["contact"] != "a@b.c" || len(d["tags"].([]any)) != 1 || d["posting_policy"] != nil {
+		t.Fatalf("restaurar vuelve a la configuración: %v", d)
+	}
+	_, lists = adminCall(t, ts, "GET", "/admin/api/moderation", "", cookie)
+	if lists["infoOverrides"].(map[string]any)["tags"] != false {
+		t.Fatalf("sin cambios tras restaurar: %v", lists["infoOverrides"])
+	}
+}
+
+func TestAdminStats_NoisyKeysFromRealRejections(t *testing.T) {
+	owner, spammer := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_MAX_CONTENT_LENGTH": "10"})
+	r := connect(t, ts)
+	for i := 0; i < 4; i++ {
+		publish(r, spammer.event(1, strings.Repeat("x", 50), nil)) // demasiado largo: se rechaza
+	}
+	cookie := adminLogin(t, ts, owner)
+	_, stats := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+	noisy := stats["activity"].(map[string]any)["noisy"].([]any)
+	if len(noisy) != 1 {
+		t.Fatalf("una clave ruidosa: %v", noisy)
+	}
+	n := noisy[0].(map[string]any)
+	if n["pubkey"] != spammer.pk || n["count"] != float64(4) || n["mine"] != false {
+		t.Fatalf("ranking: %v", n)
+	}
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/stats", "", ""); res.StatusCode != 401 {
+		t.Fatal("sin sesión no se enseñan las claves completas")
+	}
+}

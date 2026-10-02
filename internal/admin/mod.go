@@ -21,7 +21,17 @@ const (
 	SettingName        = "name"
 	SettingDescription = "description"
 	SettingIcon        = "icon"
+	SettingContact     = "contact"
+	SettingTags        = "tags"      // lista separada por comas
+	SettingLanguages   = "languages" // lista separada por comas
+	SettingPolicy      = "posting_policy"
 )
+
+// infoFields relaciona cada campo del formulario "Información del relé" con el ajuste donde se guarda.
+var infoFields = map[string]string{
+	"name": SettingName, "description": SettingDescription, "icon": SettingIcon,
+	"contact": SettingContact, "tags": SettingTags, "languages": SettingLanguages, "postingPolicy": SettingPolicy,
+}
 
 // Effects son las acciones que tocan los eventos guardados (las implementa el servidor).
 type Effects interface {
@@ -31,11 +41,54 @@ type Effects interface {
 	DeleteEventsByAuthor(ctx context.Context, pubkey string, max int) (int, error)
 }
 
-// InfoView es lo que NIP-11 muestra del relé (nombre, descripción, icono).
+// InfoView es lo que NIP-11 muestra del relé (nombre, descripción, icono, contacto, etiquetas, idiomas y normas).
 type InfoView struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	Icon          string   `json:"icon"`
+	Contact       string   `json:"contact"`
+	Tags          []string `json:"tags"`
+	Languages     []string `json:"languages"`
+	PostingPolicy string   `json:"postingPolicy"`
+}
+
+var langCode = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
+
+// normalizeList admite "a, b,c" (o un array) y devuelve la lista limpia, sin vacíos ni repetidos, validando cada elemento.
+func normalizeList(v any, field string, maxItems, maxLen int, valid func(string) bool) ([]string, error) {
+	var raw []string
+	switch x := v.(type) {
+	case nil:
+	case string:
+		raw = strings.Split(x, ",")
+	case []any:
+		for _, i := range x {
+			s, ok := i.(string)
+			if !ok {
+				return nil, fmt.Errorf("%q must be a list of strings", field)
+			}
+			raw = append(raw, s)
+		}
+	default:
+		return nil, fmt.Errorf("%q must be a comma-separated list", field)
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[strings.ToLower(s)] {
+			continue
+		}
+		if len([]rune(s)) > maxLen || strings.ContainsAny(s, ",\n") || (valid != nil && !valid(s)) {
+			return nil, fmt.Errorf("%q has an invalid item: %q", field, s)
+		}
+		seen[strings.ToLower(s)] = true
+		out = append(out, s)
+	}
+	if len(out) > maxItems {
+		return nil, fmt.Errorf("%q has too many items (maximum %d)", field, maxItems)
+	}
+	return out, nil
 }
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -133,9 +186,13 @@ func (p *Panel) moderationLists(w http.ResponseWriter, r *http.Request) {
 	}
 	st := p.o.Store
 	overrides := map[string]bool{}
-	for _, k := range []string{SettingName, SettingDescription, SettingIcon} {
-		_, overrides[k] = st.Setting(k)
+	for field, key := range infoFields {
+		_, overrides[field] = st.Setting(key)
 	}
+	info := p.o.Info()
+	info.Tags, info.Languages = nonNil(info.Tags), nonNil(info.Languages)
+	defaults := p.o.InfoDefaults
+	defaults.Tags, defaults.Languages = nonNil(defaults.Tags), nonNil(defaults.Languages)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"bannedPubkeys":   entries(st.BannedPubKeys()),
 		"allowedPubkeys":  entries(st.AllowedPubKeys()),
@@ -143,8 +200,8 @@ func (p *Panel) moderationLists(w http.ResponseWriter, r *http.Request) {
 		"blockedIPs":      entries(st.BlockedIPs()),
 		"allowedKinds":    nonNil(st.AllowedKinds()),
 		"disallowedKinds": nonNil(st.DisallowedKinds()),
-		"info":            p.o.Info(),
-		"infoDefaults":    p.o.InfoDefaults,
+		"info":            info,
+		"infoDefaults":    defaults,
 		"infoOverrides":   overrides,
 		"owner":           p.o.Owner,
 	})
@@ -428,11 +485,38 @@ func (p *Panel) setInfo(body map[string]any, r *http.Request) (any, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if err := set(SettingContact, "contact", 200, true, nil); err != nil {
+		return nil, err
+	}
+	if err := set(SettingPolicy, "postingPolicy", 300, true, func(v string) error {
+		if strings.HasPrefix(v, "https://") {
+			return nil
+		}
+		return fmt.Errorf("the posting policy must be an https:// URL")
+	}); err != nil {
+		return nil, err
+	}
+	for _, l := range []struct {
+		field, key string
+		max, len   int
+		valid      func(string) bool
+	}{{"tags", SettingTags, 12, 32, nil}, {"languages", SettingLanguages, 8, 12, langCode.MatchString}} {
+		v, present := body[l.field]
+		if !present {
+			continue
+		}
+		items, err := normalizeList(v, l.field, l.max, l.len, l.valid)
+		if err != nil {
+			return nil, err
+		}
+		if err := st.SetSetting(l.key, strings.Join(items, ",")); err != nil {
+			return nil, fmt.Errorf("could not save the change")
+		}
+	}
 	if list, ok := body["reset"].([]any); ok {
-		keys := map[string]string{"name": SettingName, "description": SettingDescription, "icon": SettingIcon}
 		for _, f := range list {
-			if name, _ := f.(string); keys[name] != "" {
-				if err := st.DeleteSetting(keys[name]); err != nil {
+			if name, _ := f.(string); infoFields[name] != "" {
+				if err := st.DeleteSetting(infoFields[name]); err != nil {
 					return nil, fmt.Errorf("could not save the change")
 				}
 			}
@@ -443,9 +527,9 @@ func (p *Panel) setInfo(body map[string]any, r *http.Request) (any, error) {
 }
 
 // nonNil evita que una lista vacía se serialice como null (el panel espera siempre un array).
-func nonNil(v []int) []int {
+func nonNil[T any](v []T) []T {
 	if v == nil {
-		return []int{}
+		return []T{}
 	}
 	return v
 }

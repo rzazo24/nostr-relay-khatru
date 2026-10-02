@@ -72,6 +72,12 @@
         </section>
       </div>
 
+      <section class="panel" id="noisy-panel">
+        <h2>Claves más ruidosas <button type="button" class="q" data-help="h-noisy" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <p class="muted small">Las claves a las que el relé ha rechazado más eventos en las últimas 24 h (desde el último arranque). Pulsa una clave para copiarla completa.</p>
+        <div class="scroll"><table id="noisy"><thead><tr><th>Clave</th><th>Rechazos</th><th>Tipo</th><th>Motivo</th><th>Último</th><th></th></tr></thead><tbody></tbody></table></div>
+      </section>
+
       <section class="panel">
         <h2>Eventos recientes <button type="button" class="q" data-help="h-recent" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <p class="muted small">Contenido de las notas públicas, recortado. Los mensajes privados no muestran su contenido. Pulsa una clave para copiarla completa.</p>
@@ -148,6 +154,10 @@
               <label class="lbl">Nombre <span id="o-name" class="badge" hidden>cambiado</span><input name="name" maxlength="80" required></label>
               <label class="lbl">Descripción <span id="o-description" class="badge" hidden>cambiada</span><textarea name="description" rows="3" maxlength="600" required></textarea></label>
               <label class="lbl">Icono (https://… o /icon.png) <span id="o-icon" class="badge" hidden>cambiado</span><input name="icon" maxlength="300" placeholder="vacío = sin icono"></label>
+              <label class="lbl">Contacto <span id="o-contact" class="badge" hidden>cambiado</span><input name="contact" maxlength="200" placeholder="correo, NIP-05, npub… (vacío = ninguno)"></label>
+              <label class="lbl">Etiquetas <span id="o-tags" class="badge" hidden>cambiadas</span><input name="tags" maxlength="400" placeholder="general, open (separadas por comas)"></label>
+              <label class="lbl">Idiomas <span id="o-languages" class="badge" hidden>cambiados</span><input name="languages" maxlength="120" placeholder="en, es (códigos de idioma, separados por comas)"></label>
+              <label class="lbl">Normas de uso (https://…) <span id="o-postingPolicy" class="badge" hidden>cambiadas</span><input name="postingPolicy" maxlength="300" placeholder="vacío = sin normas"></label>
               <div class="btns"><button type="submit" class="primary">Guardar</button><button type="button" id="info-reset">Restaurar los de la configuración</button></div>
             </form>
           </div>
@@ -173,6 +183,7 @@
         <a href="#h-growth">Crecimiento</a>
         <a href="#h-kinds">Eventos por tipo</a>
         <a href="#h-rejections">Rechazos</a>
+        <a href="#h-noisy">Claves más ruidosas</a>
         <a href="#h-recent">Eventos recientes</a>
         <a href="#h-search">Buscar</a>
         <a href="#h-moderation">Moderación</a>
@@ -260,6 +271,19 @@
         </dl>
       </section>
 
+      <section id="h-noisy">
+        <h3>Claves más ruidosas</h3>
+        <p>Ordena a quién se le han rechazado más eventos, para ver de un vistazo quién está abusando sin tener que mirar el registro. Cuenta solo <b>eventos</b> (no consultas), por clave completa, <b>desde el último arranque del relé</b> y solo las últimas 24 h; se guarda en memoria, así que se pone a cero al reiniciar. Solo se recuerdan las 1 000 claves más ruidosas.</p>
+        <dl>
+          <dt>Clave</dt><dd>La clave pública completa de quien publica (pulsa para copiarla). Es la única parte del panel donde ves claves enteras de terceros; las IPs no se guardan ni se muestran nunca.</dd>
+          <dt>Rechazos</dt><dd>Cuántos eventos de esa clave se han rechazado en total.</dd>
+          <dt>Tipo / Motivo</dt><dd>El tipo del último evento rechazado y el motivo que más se repite (por ejemplo «rate-limited», que es pasarse del límite de velocidad).</dd>
+          <dt>Último</dt><dd>Cuándo fue el último rechazo.</dd>
+          <dt>Botones</dt><dd><b>Banear</b> bloquea la clave (puedes deshacerlo en «Claves baneadas»). <b>Buscar</b> abre la búsqueda con esa clave, pero solo encuentra lo que el relé ha <b>guardado</b>: los eventos efímeros, que son casi todos los que se rechazan por velocidad, no se guardan. Tu propia clave no se puede banear.</dd>
+        </dl>
+        <p>Ojo: pasarse del límite de velocidad no siempre es abuso (un cliente muy activo detrás de una IP compartida también lo provoca), y quien quiera puede crear claves nuevas. Banear sirve sobre todo contra quien insiste con la misma.</p>
+      </section>
+
       <section id="h-recent">
         <h3>Eventos recientes</h3>
         <p>Los 30 eventos guardados más nuevos, con el contenido recortado para poder juzgarlos de un vistazo. Es lo que miras para decidir si hay que moderar algo.</p>
@@ -295,7 +319,7 @@
           <dt>Eventos vetados</dt><dd>Un evento concreto, por su identificador (hex, <code>note1…</code> o <code>nevent1…</code>). Se borra si estaba guardado y no se vuelve a aceptar. Útil para contenido ilegal o molesto sin banear a toda la cuenta.</dd>
           <dt>Tipos de evento</dt><dd><b>Prohibir</b> un tipo lo rechaza siempre (por ejemplo, un tipo con el que hay spam). <b>Permitir</b> es lo contrario y más estricto: en cuanto permites uno, SOLO pasan los tipos permitidos y se rechaza el resto (el borrado, tipo 5, siempre pasa). La página te avisa antes.</dd>
           <dt>IPs bloqueadas</dt><dd>Bloquea una dirección IP para que no pueda conectarse. El relé no guarda IPs, así que esto sirve cuando ya conoces la dirección por otro sitio.</dd>
-          <dt>Información del relé</dt><dd>El nombre, la descripción y el icono que anuncia el relé y que muestran los clientes y la página de presentación. Para que la descripción salga en dos idiomas, escríbela como <code>English text | Texto en español</code>. «Restaurar» vuelve a los valores de la configuración. El icono puede ser una dirección <code>https://…</code> o una ruta como <code>/icon.png</code>; vacío = sin icono.</dd>
+          <dt>Información del relé</dt><dd>Lo que anuncia el relé y muestran los clientes y la página de presentación: nombre, descripción, icono, <b>contacto</b> (un correo, un NIP-05 o un npub; es público), <b>etiquetas</b> (por ejemplo «general, open», las usan los directorios de relés para clasificarlo), <b>idiomas</b> (códigos como «en, es») y <b>normas de uso</b> (una dirección https). Para que la descripción salga en dos idiomas, escríbela como <code>English text | Texto en español</code>. «Restaurar» vuelve a los valores de la configuración (los del archivo <code>.env</code>). Los campos que cambias aquí tienen una marca «cambiado» y mandan sobre el <code>.env</code> hasta que restauras. El icono puede ser una dirección <code>https://…</code> o una ruta como <code>/icon.png</code>; vacío = sin icono.</dd>
         </dl>
         <p>Cada acción deja una línea en el registro del relé (<code>admin action=…</code>), con solo los 8 primeros caracteres de la clave o del evento.</p>
       </section>

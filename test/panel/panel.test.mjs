@@ -73,9 +73,9 @@ async function clickAndToast(page, selector) {
 }
 
 /** Las estadísticas se cachean 10 s en el relé: pulsa «Actualizar» hasta que se cumpla la condición. */
-async function refreshUntil(page, cond) {
+async function refreshUntil(page, cond, arg) {
   for (let i = 0; i < 25; i++) {
-    if (await page.evaluate(cond)) return
+    if (await page.evaluate(cond, arg)) return
     await sleep(1000)
     await page.click('#refresh')
   }
@@ -183,7 +183,7 @@ describe('panel de control', () => {
     assert.deepEqual(missing, [], `etiquetas del panel sin explicar en la ayuda: ${missing.join(', ')}`)
     assert.ok(labels.length > 40, `se esperaban muchas etiquetas, hubo ${labels.length}`)
 
-    for (const id of ['h-cards', 'h-activity', 'h-growth', 'h-kinds', 'h-rejections', 'h-recent', 'h-search', 'h-moderation', 'h-config']) {
+    for (const id of ['h-cards', 'h-activity', 'h-growth', 'h-kinds', 'h-rejections', 'h-recent', 'h-noisy', 'h-search', 'h-moderation', 'h-config']) {
       await page.click(`[data-help="${id}"]`)
       const offset = await page.evaluate((i) => Math.round(document.getElementById(i).getBoundingClientRect().top - document.getElementById('help-body').getBoundingClientRect().top), id)
       assert.ok(offset >= 0 && offset < 200, `el ? de ${id} debe llevar a su sección (offset ${offset})`)
@@ -278,6 +278,27 @@ describe('panel de control', () => {
     const doc = await (await fetch(stack.relayHttp, { headers: { Accept: 'application/nostr+json' } })).json()
     assert.equal(doc.name, 'Nombre desde el panel')
     assert.equal(doc.description, 'English text | Texto en español')
+
+    // contacto, etiquetas, idiomas y normas: el NIP-11 los anuncia, los repetidos y vacíos se limpian, y los inválidos se rechazan
+    await page.fill('#f-info [name=contact]', 'zhash@rizful.com')
+    await page.fill('#f-info [name=tags]', ' general, open ,General,, es ')
+    await page.fill('#f-info [name=languages]', 'en, es')
+    await page.fill('#f-info [name=postingPolicy]', 'https://example.com/normas')
+    assert.match(await clickAndToast(page, '#f-info button[type=submit]'), /guardada/)
+    const doc1 = await (await fetch(stack.relayHttp, { headers: { Accept: 'application/nostr+json' } })).json()
+    assert.equal(doc1.contact, 'zhash@rizful.com')
+    assert.deepEqual(doc1.tags, ['general', 'open', 'es'])
+    assert.deepEqual(doc1.language_tags, ['en', 'es'])
+    assert.equal(doc1.posting_policy, 'https://example.com/normas')
+    assert.equal(await page.inputValue('#f-info [name=tags]'), 'general, open, es', 'el formulario muestra la lista limpia')
+    for (const id of ['contact', 'tags', 'languages', 'postingPolicy']) assert.equal(await page.isVisible(`#o-${id}`), true, `marca «cambiado» en ${id}`)
+    await page.fill('#f-info [name=languages]', 'en, no es')
+    assert.match(await clickAndToast(page, '#f-info button[type=submit]'), /invalid item/)
+    await page.fill('#f-info [name=languages]', 'en, es')
+    await page.fill('#f-info [name=postingPolicy]', 'http://inseguro.example')
+    assert.match(await clickAndToast(page, '#f-info button[type=submit]'), /https/)
+    await page.fill('#f-info [name=postingPolicy]', 'https://example.com/normas')
+
     await page.fill('#f-info [name=description]', 'escribiendo…')
     await page.click('#refresh')
     await sleep(700)
@@ -286,6 +307,38 @@ describe('panel de control', () => {
     const doc2 = await (await fetch(stack.relayHttp, { headers: { Accept: 'application/nostr+json' } })).json()
     assert.equal(doc2.name, 'Relé de pruebas')
     assert.equal(doc2.description, 'Descripción original')
+    assert.equal(doc2.contact, '', 'restaurar vuelve al contacto de la configuración (vacío en las pruebas)')
+    assert.equal(doc2.tags ?? null, null)
+    assert.equal(await page.isVisible('#o-tags'), false)
+    await ctx.close()
+  })
+
+  it('claves más ruidosas: ranking de rechazos, copiar la clave, buscar y banear (la del dueño no se puede banear)', async () => {
+    const loud = newKey(), quiet = newKey()
+    for (let i = 0; i < 4; i++) await pub(loud.sk, 1, 'z'.repeat(300)) // demasiado largo: rechazado
+    await pub(quiet.sk, 1, 'z'.repeat(300))
+    await pub(stack.ownerSecret, 1, 'z'.repeat(300)) // el dueño también, para ver que no se ofrece banearlo
+    const { ctx, page } = await openPanel()
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(stack.panelUrl).origin })
+    await login(page)
+    await refreshUntil(page, (pk) => [...document.querySelectorAll('#noisy tbody tr')].some((r) => r.textContent.includes(pk)), loud.pk.slice(0, 12))
+    const rows = await page.$$eval('#noisy tbody tr', (r) => r.map((x) => x.innerText.replace(/\s+/g, ' ')))
+    assert.ok(rows[0].includes(loud.pk.slice(0, 12)) && /\b4\b/.test(rows[0]), `la más ruidosa va primero con sus 4 rechazos: ${rows[0]}`)
+    const ownerRow = page.locator('#noisy tbody tr', { hasText: stack.ownerPk.slice(0, 12) })
+    assert.equal(await ownerRow.locator('button:has-text("Banear")').count(), 0, 'la clave del dueño no se puede banear desde aquí')
+    assert.match(await ownerRow.innerText(), /tuya/)
+
+    await page.locator('#noisy tbody tr').first().locator('button.pk').click()
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), loud.pk, 'pulsar la clave copia la completa')
+
+    await page.locator('#noisy tbody tr', { hasText: loud.pk.slice(0, 12) }).locator('button:has-text("Buscar")').click()
+    await page.waitForSelector('#search-out .resultinfo')
+    assert.match(await page.innerText('#search-out .resultinfo'), new RegExp(loud.pk.slice(0, 12)))
+
+    assert.match(await clickAndToast(page, `#noisy tbody tr:has-text("${loud.pk.slice(0, 12)}") button:has-text("Banear")`), /Clave baneada/)
+    assert.match(await pub(loud.sk, 1, 'hola'), /banned/)
+    assert.match(await page.innerText('#l-banned'), /claves más ruidosas/)
+    await page.click('#l-banned button')
     await ctx.close()
   })
 

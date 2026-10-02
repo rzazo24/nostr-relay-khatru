@@ -127,6 +127,14 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**Noisy keys** (`activityLog.noisy`, `admin.NoisyKey`, `GET /admin/api/stats` → `activity.noisy`): per-*full*-pubkey counters of
+rejected **events** (not filters), memory only, ≤1 000 keys (`pruneNoisyLocked` drops stale >24 h, then the quieter half), never
+logged or persisted. This is the one place the panel shows third parties' full keys (still never IPs); the log/recent-rejections
+keep the 8-char rule. khatru verifies signatures before policies, so a counted pubkey really signed the event.
+**Relay info** now has 7 fields (`admin.infoFields`: name, description, icon, contact, tags, languages, postingPolicy ↔ settings
+in `moderation_settings`); `effectiveInfo` merges settings over `infoFromConfig(cfg)`. In `OverwriteRelayInformation` the icon is
+only overridden when a setting exists, because khatru has already resolved a relative `RELAY_ICON` against the public URL.
+
 **Search** (`internal/admin/search.go`, `GET /admin/api/search?q=&kind=&next=`): `planSearch` decides what `q` is (npub/nprofile →
 author; note1/nevent1 → id; 64 hex → author OR id (and shows a key summary); 6–63 hex → prefix of pubkey OR id; ≤5 digits → kind;
 otherwise `content LIKE` with `%`/`_`/`\` escaped). **Text search excludes private kinds (4, 13, 14, 1059) in SQL and never

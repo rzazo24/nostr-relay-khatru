@@ -106,3 +106,5 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .resultinfo { margin:10px 0 4px; color:var(--muted); font-size:.9rem; }
 button.chipbtn { padding:1px 8px; border-radius:999px; font-size:.8rem; }
 td .pk { cursor:pointer; }
+
+#noisy td:last-child { white-space:nowrap; text-align:right; } #noisy .act { margin-left:4px; }

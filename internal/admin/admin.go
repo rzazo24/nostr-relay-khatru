@@ -54,8 +54,19 @@ type Rejection struct {
 	Reason string `json:"reason"`
 }
 
+// NoisyKey es una clave de la que el relé ha rechazado eventos (recuento desde el arranque, solo en memoria).
+type NoisyKey struct {
+	Pubkey string `json:"pubkey"` // completo: solo se manda al dueño con sesión, para poder banearla o buscarla
+	Count  int    `json:"count"`
+	Kind   int    `json:"kind"`   // tipo del último evento rechazado
+	Reason string `json:"reason"` // motivo más frecuente
+	Last   int64  `json:"last"`
+	Mine   bool   `json:"mine"`
+}
+
 // Activity es lo que el panel necesita del registro de actividad del servidor.
 type Activity interface {
+	Noisy(limit int) []NoisyKey
 	Minutes(now time.Time, n int) []Minute
 	Rejections(limit int) []Rejection
 	ReasonTotals() map[string]int
@@ -512,6 +523,7 @@ func (p *Panel) stats(w http.ResponseWriter, r *http.Request) {
 			"minutes":    p.o.Activity.Minutes(now, 60),
 			"reasons":    p.o.Activity.ReasonTotals(),
 			"rejections": p.o.Activity.Rejections(40),
+			"noisy":      markMine(p.o.Activity.Noisy(10), p.o.Owner),
 		},
 		"moderation": map[string]any{
 			"bannedPubkeys":   p.o.Moderation.CountBannedPubKeys(),
@@ -541,4 +553,15 @@ func (p *Panel) history(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// markMine marca la clave del dueño (el panel no ofrece banearla) y nunca devuelve null.
+func markMine(keys []NoisyKey, owner string) []NoisyKey {
+	if keys == nil {
+		return []NoisyKey{}
+	}
+	for i := range keys {
+		keys[i].Mine = keys[i].Pubkey == owner
+	}
+	return keys
 }

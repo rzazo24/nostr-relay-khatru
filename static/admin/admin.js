@@ -143,6 +143,10 @@ function render(d) {
     el('td', { text: clock(r.t) }), el('td', { text: r.what === 'event' ? 'evento' : 'consulta' }),
     el('td', { text: r.kind >= 0 ? String(r.kind) : '—' }), el('td', {}, r.pubkey ? searchButton(r.pubkey) : '—'), el('td', { class: 'reason', text: r.reason }))))
 
+  const noisyBody = $('noisy').querySelector('tbody')
+  noisyBody.replaceChildren(...d.activity.noisy.map((n) => noisyRow(n, now)))
+  if (!d.activity.noisy.length) noisyBody.append(el('tr', {}, el('td', { colspan: '6', class: 'muted', text: 'Ningún evento rechazado en las últimas 24 h.' })))
+
   $('recent').replaceChildren(...d.events.recent.map((e) => eventItem(e, now, { source: 'eventos recientes' })))
 
   const list = (a) => (a && a.length ? a.join(', ') : 'ninguno')
@@ -155,7 +159,27 @@ function render(d) {
   ])
 }
 
-// Fila de un evento (en «Eventos recientes» y en los resultados de la búsqueda). Las acciones de
+// Fila de «Claves más ruidosas»: clave (copiable), rechazos, último tipo y motivo, y las acciones.
+function noisyRow(n, now) {
+  const pk = el('button', { class: 'pk', type: 'button', title: 'Copiar clave completa', text: n.pubkey.slice(0, 12) + '…' })
+  pk.addEventListener('click', () => navigator.clipboard.writeText(n.pubkey).then(() => { pk.textContent = 'copiada ✓'; setTimeout(() => { pk.textContent = n.pubkey.slice(0, 12) + '…' }, 1200) }).catch(() => {}))
+  const acts = el('td', {})
+  const find = el('button', { type: 'button', class: 'act', text: 'Buscar', title: 'Buscar lo que el relé tiene guardado de esta clave (los eventos efímeros no se guardan)' })
+  find.addEventListener('click', () => { searchFor(n.pubkey, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
+  acts.append(find)
+  if (n.mine) acts.append(el('span', { class: 'badge', text: 'tuya' }))
+  else {
+    const ban = el('button', { type: 'button', class: 'act danger', text: 'Banear', title: 'Banear esta clave' })
+    ban.addEventListener('click', () => {
+      if (!confirm(`¿Banear la clave ${n.pubkey.slice(0, 12)}…?\n${fmt(n.count)} rechazos (${n.reason}). Dejará de poder publicar; puedes deshacerlo desde «Claves baneadas».`)) return
+      act('ban-pubkey', { pubkey: n.pubkey, reason: 'desde claves más ruidosas', deleteEvents: false }, 'Clave baneada')
+    })
+    acts.append(ban)
+  }
+  return el('tr', {}, el('td', {}, pk), el('td', { text: fmt(n.count) }), el('td', { text: String(n.kind) }), el('td', { class: 'reason', text: n.reason }), el('td', { text: ago(n.last, now) }), acts)
+}
+
+// Fila de un evento (en «Eventos recientes" y en los resultados de la búsqueda). Las acciones de
 // moderación no aparecen en los eventos del dueño.
 function eventItem(e, now, { source, searchKey } = {}) {
   const pk = el('button', { class: 'pk', type: 'button', title: searchKey ? 'Buscar todo lo de esta clave' : 'Copiar clave completa', text: e.pubkey.slice(0, 12) + '…' })
@@ -337,10 +361,14 @@ async function loadModeration(forceInfo) {
     const f = $('f-info')
     f.elements.name.value = m.info.name
     f.elements.description.value = m.info.description
-    f.elements.icon.value = m.info.icon
+    for (const k of INFO_FIELDS) f.elements[k].value = infoText(m.info, k)
   }
-  for (const k of ['name', 'description', 'icon']) $(`o-${k}`).hidden = !m.infoOverrides[k]
+  for (const k of INFO_FIELDS) $(`o-${k}`).hidden = !m.infoOverrides[k]
 }
+
+const INFO_FIELDS = ['name', 'description', 'icon', 'contact', 'tags', 'languages', 'postingPolicy']
+// Las listas (etiquetas, idiomas) se muestran como «a, b, c».
+const infoText = (info, k) => (Array.isArray(info[k]) ? info[k].join(', ') : info[k] || '')
 
 function onSubmit(id, handler) {
   $(id).addEventListener('submit', async (ev) => {
@@ -375,13 +403,13 @@ $('f-info').addEventListener('submit', async (ev) => {
   const f = ev.currentTarget
   // Solo se envía lo que has cambiado (así un icono vacío que no tocas no da error).
   const body = {}
-  for (const k of ['name', 'description', 'icon']) if (modState && f.elements[k].value !== modState.info[k]) body[k] = f.elements[k].value
+  for (const k of INFO_FIELDS) if (modState && f.elements[k].value.trim() !== infoText(modState.info, k)) body[k] = f.elements[k].value
   if (!Object.keys(body).length) { toast('No hay nada que guardar', false); return }
   await act('info', body, 'Información guardada', { forceInfo: true })
 })
 $('info-reset').addEventListener('click', async () => {
-  if (!confirm('¿Restaurar nombre, descripción e icono a los de la configuración?')) return
-  await act('info', { reset: ['name', 'description', 'icon'] }, 'Restaurados los de la configuración', { forceInfo: true })
+  if (!confirm('¿Restaurar toda la información del relé a los valores de la configuración?')) return
+  await act('info', { reset: INFO_FIELDS }, 'Restaurados los de la configuración', { forceInfo: true })
 })
 
 document.querySelectorAll('.tabs [data-range]').forEach((b) => b.addEventListener('click', () => {

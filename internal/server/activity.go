@@ -22,7 +22,8 @@ var LogOutput io.Writer = os.Stdout
 const maxRejectLinesPerReasonPerMinute = 5
 
 // activityLog deja constancia de qué hace el relé sin registrar contenido ni IPs:
-// solo el kind, un trozo corto del pubkey y el motivo del rechazo. Así se ve, por
+// solo el kind, un trozo corto del pubkey y el motivo del rechazo (el log y los rechazos recientes). Aparte, el
+// panel recibe un recuento por clave completa de los eventos rechazados, solo en memoria y 24 h como máximo. Así se ve, por
 // ejemplo, qué le rechaza a un cliente concreto (Damus, otro relé...) sin guardar
 // nada sensible. Una vez por minuto, y solo si hubo actividad, imprime un resumen.
 type activityLog struct {
@@ -42,16 +43,27 @@ type activityLog struct {
 	deltas       map[int64]map[string]int // contadores por hora pendientes de guardar en la base de datos
 	recent       []admin.Rejection
 	reasonTotals map[string]int
+	noisy        map[string]*noisyEntry // pubkey completo -> rechazos de eventos suyos (solo en memoria, jamás se guarda ni se imprime)
+}
+
+// noisyEntry cuenta los rechazos de una clave: cuántos, el último tipo y el motivo más repetido.
+type noisyEntry struct {
+	count   int
+	kind    int
+	last    int64
+	reasons map[string]int
 }
 
 const (
 	historyMinutes = 120
 	recentKept     = 100
+	noisyKept      = 1000 // claves distintas que se recuerdan; al pasarse se descartan las menos ruidosas
+	noisyMaxAge    = 24 * time.Hour
 )
 
 func newActivityLog(out io.Writer, now func() time.Time) *activityLog {
 	return &activityLog{out: out, now: now, windowFrom: now(), rejected: map[string]int{}, printed: map[string]int{},
-		minutes: map[int64]*admin.Minute{}, reasonTotals: map[string]int{}, deltas: map[int64]map[string]int{}}
+		minutes: map[int64]*admin.Minute{}, reasonTotals: map[string]int{}, noisy: map[string]*noisyEntry{}, deltas: map[int64]map[string]int{}}
 }
 
 // bumpLocked suma 1 a un contador de la hora actual, pendiente de guardarse (ver TakeDeltas).
@@ -115,6 +127,7 @@ func (a *activityLog) Rejected(what string, kind int, pubkey, reason string) {
 	a.bumpLocked("rejected")
 	a.bumpLocked("rej:" + key)
 	a.bucketLocked().Rejected++
+	a.noteNoisyLocked(what, kind, pubkey, key)
 	a.recent = append(a.recent, admin.Rejection{T: a.now().Unix(), What: what, Kind: kind, Pubkey: shortKey(pubkey), Reason: reason})
 	if len(a.recent) > recentKept {
 		a.recent = a.recent[len(a.recent)-recentKept:]
@@ -243,4 +256,81 @@ func (a *activityLog) Retention(res retention.Result, err error) {
 	if res.Deleted > 0 {
 		fmt.Fprintf(a.out, "retention deleted=%d scanned=%d\n", res.Deleted, res.Scanned)
 	}
+}
+
+// noteNoisyLocked cuenta un rechazo de evento contra su autor. Solo se cuentan eventos con una clave válida
+// (en las consultas el pubkey es el de quien se autenticó, y suele estar vacío).
+func (a *activityLog) noteNoisyLocked(what string, kind int, pubkey, reason string) {
+	if what != "event" || len(pubkey) != 64 {
+		return
+	}
+	n := a.noisy[pubkey]
+	if n == nil {
+		if len(a.noisy) >= noisyKept {
+			a.pruneNoisyLocked()
+			if len(a.noisy) >= noisyKept {
+				return // todo lo recordado es más ruidoso que una clave recién llegada
+			}
+		}
+		n = &noisyEntry{reasons: map[string]int{}}
+		a.noisy[pubkey] = n
+	}
+	n.count++
+	n.kind = kind
+	n.last = a.now().Unix()
+	n.reasons[reason]++
+}
+
+// pruneNoisyLocked olvida las claves sin actividad en 24 h y, si siguen sobrando, la mitad menos ruidosa.
+func (a *activityLog) pruneNoisyLocked() {
+	cutoff := a.now().Add(-noisyMaxAge).Unix()
+	for k, n := range a.noisy {
+		if n.last < cutoff {
+			delete(a.noisy, k)
+		}
+	}
+	if len(a.noisy) < noisyKept {
+		return
+	}
+	counts := make([]int, 0, len(a.noisy))
+	for _, n := range a.noisy {
+		counts = append(counts, n.count)
+	}
+	sort.Ints(counts)
+	median := counts[len(counts)/2]
+	for k, n := range a.noisy {
+		if n.count <= median {
+			delete(a.noisy, k)
+		}
+	}
+}
+
+// Noisy devuelve las claves con más rechazos (las últimas 24 h), de más a menos.
+func (a *activityLog) Noisy(limit int) []admin.NoisyKey {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cutoff := a.now().Add(-noisyMaxAge).Unix()
+	out := make([]admin.NoisyKey, 0, len(a.noisy))
+	for pk, n := range a.noisy {
+		if n.last < cutoff {
+			continue
+		}
+		top, topN := "", 0
+		for r, c := range n.reasons {
+			if c > topN || (c == topN && r < top) {
+				top, topN = r, c
+			}
+		}
+		out = append(out, admin.NoisyKey{Pubkey: pk, Count: n.count, Kind: n.kind, Reason: top, Last: n.last})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Pubkey < out[j].Pubkey
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }

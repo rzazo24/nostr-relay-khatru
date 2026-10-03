@@ -60,8 +60,9 @@ function show(view) {
   $('refresh').hidden = view !== 'dash'
 }
 
-// El evento que se firma para entrar (NIP-98): lo mismo con una extensión que con un firmador remoto.
-const loginTemplate = () => ({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: [['u', `${location.origin}/admin/api/login`], ['method', 'POST']], content: '' })
+// El evento que se firma para entrar (NIP-98): lo mismo con una extensión que con un firmador remoto. El `nonce` hace que
+// dos intentos en el mismo segundo no den el mismo evento (el relé solo acepta cada firma una vez).
+const loginTemplate = () => ({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: [['u', `${location.origin}/admin/api/login`], ['method', 'POST'], ['nonce', Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('')]], content: '' })
 
 async function sendLogin(signed) {
   const res = await fetch('/admin/api/login', { method: 'POST', headers: { Authorization: 'Nostr ' + btoa(JSON.stringify(signed)) }, credentials: 'same-origin' })
@@ -78,6 +79,7 @@ function remoteReset() {
   $('remote-box').hidden = true
   $('remote-btn').hidden = false
   $('remote-link').removeAttribute('href')
+  delete $('remote-link').dataset.uri
   $('remote-diag').textContent = ''
 }
 
@@ -92,6 +94,7 @@ async function loginRemote() {
   try {
     const { createSession } = await import('/admin/nip46.js')
     session = remote = createSession({
+      extraRelays: ($('login').dataset.extraRelays || '').split(',').map((r) => r.trim()).filter(Boolean),
       onAuthUrl: (u) => say(`El firmador pide abrir esta dirección para continuar: ${u}`),
       onStatus: (t) => { if (remote === session || !session) $('remote-diag').textContent = `${new Date().toLocaleTimeString('es-ES')} · ${t}` },
     })
@@ -101,7 +104,8 @@ async function loginRemote() {
     $('login-msg').textContent = `No se pudo preparar la conexión: ${err.message || err}`
     return
   }
-  $('remote-link').setAttribute('href', session.uri)
+  $('remote-link').setAttribute('href', session.claveLink)
+  $('remote-link').dataset.uri = session.uri
   say('Esperando a que apruebes la conexión en la app firmadora…')
   try {
     await session.waitForSigner()
@@ -691,7 +695,7 @@ $('login-btn').addEventListener('click', login)
 $('remote-btn').addEventListener('click', loginRemote)
 $('remote-cancel').addEventListener('click', () => { remoteReset(); $('login-msg').textContent = '' })
 $('remote-copy').addEventListener('click', () => {
-  const href = $('remote-link').getAttribute('href')
+  const href = $('remote-link').dataset.uri
   if (!href) return
   navigator.clipboard.writeText(href).then(() => toast('Enlace copiado', false)).catch(() => toast('No se pudo copiar el enlace', true))
 })

@@ -4,79 +4,82 @@
 // aprobación y contesta por el relé con un mensaje cifrado (NIP-44, kind 24133). Después el panel le pide firmar el
 // mismo evento de inicio de sesión (NIP-98) que firmaría una extensión. La clave del dueño nunca sale del firmador.
 //
-// El intercambio pasa por ESTE relé. En el móvil la página se suspende mientras apruebas en la otra app, así que la
-// conexión se retoma sola al volver (el relé guarda unos minutos los mensajes 24133 para entregárselos entonces).
+// Relés: siempre ESTE relé (sin barra final) y, si la página lo indica (data-extra-relays), los relés extra que el
+// firmador necesita. Clave, por ejemplo, solo recibe en segundo plano lo que pasa por relay.powr.build. El panel
+// escucha y escribe en todos a la vez y se queda con lo primero que llegue.
+// En el móvil la página se suspende mientras apruebas en la otra app: la conexión se retoma sola al volver, y el relé
+// guarda unos minutos los mensajes 24133 para entregárselos entonces.
 import { generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip44, bytesToHex } from './vendor/nostr.js'
 
 const KIND = 24133
 const randomHex = (n) => bytesToHex(crypto.getRandomValues(new Uint8Array(n)))
+const noSlash = (u) => u.replace(/\/+$/, '')
 
-export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', onAuthUrl = () => {}, onStatus = () => {} } = {}) {
+export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', extraRelays = [], onAuthUrl = () => {}, onStatus = () => {} } = {}) {
   const clientSk = generateSecretKey()
   const clientPk = getPublicKey(clientSk)
   const secret = randomHex(16)
-  const relayUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/`
+  const ownRelay = noSlash(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`)
+  const relays = [...new Set([ownRelay, ...extraRelays.map(noSlash)])]
   const startedAt = Math.floor(Date.now() / 1000)
 
   const params = new URLSearchParams()
-  params.append('relay', relayUrl)
+  for (const r of relays) params.append('relay', r)
   params.set('secret', secret)
   params.set('name', name)
   params.set('url', location.origin)
   params.set('callback', `${location.origin}/admin/`)
   params.set('perms', permissions)
   const uri = `nostrconnect://${clientPk}?${params.toString()}`
+  // Enlace que abre la app Clave directamente en iOS (esquema propio de Clave); el `uri` va codificado dentro.
+  const claveLink = `clave://connect?uri=${encodeURIComponent(uri)}`
 
-  let ws = null
   let closed = false
-  let retry = 0
-  let timer = null
   let signerPk = null
   const seen = new Set()
   const pending = new Map() // id de la petición -> { resolve, reject, timeout }
-  const outbox = [] // eventos aún sin enviar (el socket no estaba abierto)
-  let ready // promesa de «el firmador ha aceptado la conexión»
   let resolveReady, rejectReady
-  ready = new Promise((res, rej) => { resolveReady = res; rejectReady = rej })
+  const ready = new Promise((res, rej) => { resolveReady = res; rejectReady = rej })
   ready.catch(() => {}) // que un rechazo sin nadie esperando no salte como error
 
-  const send = (msg) => ws.send(JSON.stringify(msg))
+  // ---- una conexión por relé, cada una con su propia reconexión ----
+  const conns = relays.map((url) => ({ url, ws: null, retry: 0, timer: null, outbox: [], label: url.replace(/^wss?:\/\//, '') }))
 
-  function subscribe() {
-    // `since` con margen: tras una suspensión se piden de nuevo los mensajes recientes (el relé los guarda unos minutos).
-    send(['REQ', 'n46', { kinds: [KIND], '#p': [clientPk], since: startedAt - 30 }])
-  }
-
-  function connect() {
-    if (closed || (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))) return
-    clearTimeout(timer)
-    onStatus('Conectando con el relé…')
-    try { ws = new WebSocket(relayUrl) } catch (err) { onStatus(`No se pudo abrir la conexión con el relé: ${err.message}`); timer = setTimeout(connect, 3000); return }
-    const mine = ws
+  function connect(c) {
+    if (closed || (c.ws && (c.ws.readyState === WebSocket.OPEN || c.ws.readyState === WebSocket.CONNECTING))) return
+    clearTimeout(c.timer)
+    onStatus(`Conectando con ${c.label}…`)
+    let ws
+    try { ws = new WebSocket(c.url) } catch (err) {
+      onStatus(`No se pudo abrir la conexión con ${c.label}: ${err.message}`)
+      c.timer = setTimeout(() => connect(c), 3000)
+      return
+    }
+    c.ws = ws
     ws.addEventListener('open', () => {
-      if (mine !== ws) return
-      onStatus('Relé conectado ✓')
-      retry = 0
-      subscribe()
-      while (outbox.length) send(['EVENT', outbox.shift()])
+      if (c.ws !== ws) return
+      onStatus(`${c.label} conectado ✓`)
+      c.retry = 0
+      // `since` con margen: tras una suspensión se piden de nuevo los mensajes recientes.
+      ws.send(JSON.stringify(['REQ', 'n46', { kinds: [KIND], '#p': [clientPk], since: startedAt - 30 }]))
+      while (c.outbox.length) ws.send(JSON.stringify(['EVENT', c.outbox.shift()]))
     })
-    ws.addEventListener('message', (m) => { if (mine === ws) onMessage(m.data) })
+    ws.addEventListener('message', (m) => { if (c.ws === ws) onMessage(c, m.data) })
     ws.addEventListener('close', () => {
-      if (mine !== ws || closed) return
-      onStatus('Conexión con el relé perdida; reintentando…')
-      timer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 5000))
+      if (c.ws !== ws || closed) return
+      onStatus(`Conexión con ${c.label} perdida; reintentando…`)
+      c.timer = setTimeout(() => connect(c), Math.min(1000 * 2 ** c.retry++, 5000))
     })
     ws.addEventListener('error', () => {}) // el 'close' que sigue reintenta
   }
 
-  function onMessage(data) {
+  function onMessage(c, data) {
     let msg
     try { msg = JSON.parse(data) } catch { return }
-    if (msg[0] === 'OK' && msg[2] === true) onStatus('Mensaje enviado al relé ✓')
-    if (msg[0] === 'OK' && msg[2] === false) { // el relé rechazó lo que enviamos (límite de velocidad, etc.)
-      for (const p of pending.values()) p.reject(new Error(`el relé rechazó el mensaje: ${msg[3] || 'sin motivo'}`))
-      pending.clear()
-      rejectReady(new Error(`el relé rechazó el mensaje: ${msg[3] || 'sin motivo'}`))
+    if (msg[0] === 'OK' && msg[2] === true) onStatus(`Mensaje enviado a ${c.label} ✓`)
+    if (msg[0] === 'OK' && msg[2] === false) {
+      // Un relé rechazó lo que enviamos (límite de velocidad, etc.). Solo es grave si todos fallan, así que se avisa y se sigue.
+      onStatus(`${c.label} rechazó el mensaje: ${msg[3] || 'sin motivo'}`)
       return
     }
     if (msg[0] !== 'EVENT' || !msg[2]) return
@@ -89,7 +92,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
     } catch { onStatus('Ha llegado un mensaje al panel que no se ha podido descifrar'); return } // no era para nosotros o está mal cifrado
     if (!signerPk) {
       // La primera respuesta válida es la aceptación de la conexión: debe devolver el secreto que pusimos en el enlace.
-      if (body.result === secret) { signerPk = ev.pubkey; onStatus('Firmador emparejado ✓'); resolveReady(signerPk) }
+      if (body.result === secret) { signerPk = ev.pubkey; onStatus(`Firmador emparejado ✓ (por ${c.label})`); resolveReady(signerPk) }
       else onStatus('Ha llegado una respuesta del firmador, pero no con el secreto esperado')
       return
     }
@@ -104,7 +107,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
   }
 
   // Al volver a la pestaña o recuperar la red, se reconecta sin esperar.
-  const wake = () => { if (!closed && (!ws || ws.readyState !== WebSocket.OPEN)) { retry = 0; connect() } }
+  const wake = () => { if (!closed) for (const c of conns) if (!c.ws || c.ws.readyState !== WebSocket.OPEN) { c.retry = 0; connect(c) } }
   const onVisible = () => { if (document.visibilityState === 'visible') wake() }
   const onViolation = (e) => onStatus(`El navegador ha bloqueado algo por la política de seguridad: ${e.violatedDirective} (${e.blockedURI || 'sin dirección'})`)
   document.addEventListener('securitypolicyviolation', onViolation)
@@ -112,16 +115,17 @@ export function createSession({ name = 'Panel de control del relé', permissions
   window.addEventListener('online', wake)
   window.addEventListener('pageshow', wake)
 
-  connect()
+  conns.forEach(connect)
 
   return {
     uri,
-    relayUrl,
+    claveLink,
+    relays,
     /** Se resuelve con la clave del firmador cuando acepta la conexión. */
     waitForSigner(ms = 180000) {
       return Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error('no se ha aprobado la conexión a tiempo')), ms))])
     },
-    /** Pide algo al firmador y espera su respuesta (el usuario puede tardar en aprobar). */
+    /** Pide algo al firmador y espera su respuesta (el usuario puede tardar en aprobar). Se envía por todos los relés. */
     request(method, args = [], ms = 120000) {
       if (!signerPk) return Promise.reject(new Error('el firmador aún no se ha conectado'))
       const id = randomHex(8)
@@ -130,13 +134,14 @@ export function createSession({ name = 'Panel de control del relé', permissions
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => { pending.delete(id); reject(new Error('el firmador no ha contestado a tiempo')) }, ms)
         pending.set(id, { resolve, reject, timeout })
-        if (ws && ws.readyState === WebSocket.OPEN) send(['EVENT', ev])
-        else { outbox.push(ev); connect() }
+        for (const c of conns) {
+          if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(['EVENT', ev]))
+          else { c.outbox.push(ev); connect(c) }
+        }
       })
     },
     close() {
       closed = true
-      clearTimeout(timer)
       document.removeEventListener('securitypolicyviolation', onViolation)
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', wake)
@@ -144,7 +149,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
       for (const p of pending.values()) { clearTimeout(p.timeout); p.reject(new Error('cancelado')) }
       pending.clear()
       rejectReady(new Error('cancelado'))
-      try { ws && ws.close() } catch { /* ya cerrado */ }
+      for (const c of conns) { clearTimeout(c.timer); try { c.ws && c.ws.close() } catch { /* ya cerrado */ } }
     },
   }
 }

@@ -25,7 +25,7 @@
 
     <p id="toast" class="toast" role="status" aria-live="polite"></p>
 
-    <section id="login" class="panel" hidden>
+    <section id="login" class="panel" data-extra-relays="wss://relay.powr.build" hidden>
       <h2>Entrar</h2>
       <p>Este panel es solo para el dueño del relé. Entras firmando con tu clave de Nostr (extensión NIP-07, por ejemplo nos2x): la clave privada nunca sale de la extensión.</p>
       <button type="button" id="login-btn" class="primary">Entrar con Nostr</button>
@@ -33,11 +33,11 @@
 
       <details id="remote-login" class="remote">
         <summary>Entrar desde el móvil con un firmador remoto (Clave en el iPhone…)</summary>
-        <p class="muted small">Sin extensión en el navegador: la clave se queda en la app firmadora (por ejemplo <b>Clave</b>, que usa el estándar NIP-46) y el panel solo recibe la firma. El intercambio pasa por este mismo relé.</p>
+        <p class="muted small">Sin extensión en el navegador: la clave se queda en la app firmadora (por ejemplo <b>Clave</b>, que usa el estándar NIP-46) y el panel solo recibe la firma. El intercambio pasa por este relé y por el relé de Clave (<code>relay.powr.build</code>), cifrado de extremo a extremo.</p>
         <button type="button" id="remote-btn">Conectar con un firmador remoto</button>
         <div id="remote-box" hidden>
           <ol class="small">
-            <li>Pulsa <b>Abrir Clave</b> (o copia el enlace y pégalo en la app) y <b>aprueba</b> la conexión.</li>
+            <li>Pulsa <b>Abrir Clave</b> (si no se abre, usa <b>Copiar enlace</b> y pégalo en Clave, en <i>Connect</i>) y <b>aprueba</b> la conexión.</li>
             <li>Vuelve a esta página: seguirá sola. Tendrás que aprobar también la firma del inicio de sesión.</li>
           </ol>
           <p class="btns">

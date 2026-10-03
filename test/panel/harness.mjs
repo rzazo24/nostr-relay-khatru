@@ -66,7 +66,7 @@ export async function startStack(extraEnv = {}) {
   relay.stdout.on('data', (d) => { relayLog += d })
   relay.stderr.on('data', (d) => { relayLog += d })
 
-  const csp = adminCSP().replace('wss://{$RELAY_DOMAIN}', `ws://127.0.0.1:${panelPort}`) // en las pruebas el relé cuelga del host del panel
+  const csp = adminCSP().replace('wss://{$RELAY_DOMAIN}', `ws://127.0.0.1:${panelPort}`).replace('wss://relay.powr.build', `ws://127.0.0.1:${panelPort}`) // en las pruebas el relé cuelga del host del panel
   const allowedAdmin = adminPaths()
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/admin/api/')) {
@@ -84,6 +84,11 @@ export async function startStack(extraEnv = {}) {
     const headers = { 'Content-Type': types[path.extname(file)] || 'text/plain', 'Cache-Control': 'no-cache' }
     if (isAdmin) headers['Content-Security-Policy'] = csp
     res.writeHead(200, headers)
+    if (f === '/admin/index.html') {
+      // El «relé extra» de producción (relay.powr.build) se sustituye por otra ruta del mismo relé de pruebas.
+      res.end(fs.readFileSync(file, 'utf8').replace('data-extra-relays="wss://relay.powr.build"', `data-extra-relays="ws://127.0.0.1:${panelPort}/clave"`))
+      return
+    }
     fs.createReadStream(file).pipe(res)
   }).listen(panelPort, '127.0.0.1')
   // Como Caddy en producción, el WebSocket del relé cuelga de la misma dirección que el panel (el panel NIP-46 conecta a `ws://<su host>/`).

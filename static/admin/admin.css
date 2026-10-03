@@ -195,3 +195,8 @@ main { padding-left:max(20px, env(safe-area-inset-left)); padding-right:max(20px
   #dash section.panel.collapsed > :not(h2) { display:none; }
   #dash section.panel:not(.collapsed) > h2[role=button] { margin-bottom:8px; }
 }
+
+/* Selector de idioma EN / ES */
+.lang { display:inline-flex; } .lang button { border-radius:0; padding:6px 10px; min-width:44px; color:var(--muted); font-size:.85rem; }
+.lang button:first-child { border-radius:8px 0 0 8px; } .lang button:last-child { border-radius:0 8px 8px 0; margin-left:-1px; }
+.lang button[aria-pressed="true"] { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:700; position:relative; }

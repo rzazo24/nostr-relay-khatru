@@ -34,8 +34,8 @@ async function pub(sk, kind, content, tags = [], ago = 0) {
 }
 
 /** Abre el panel en un contexto nuevo. `extension: false` simula un navegador sin nos2x. */
-async function openPanel({ signWith = () => stack.ownerSecret, extension = true } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' })
+async function openPanel({ signWith = () => stack.ownerSecret, extension = true, locale = 'es-ES' } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale, timezoneId: 'Europe/Madrid' })
   if (extension) {
     await ctx.exposeFunction('__sign', (ev) => finalizeEvent({ ...ev, tags: [...ev.tags, ['nonce', String(Math.random())]] }, signWith()))
     await ctx.addInitScript(() => { window.nostr = { signEvent: (ev) => window.__sign(ev) } })
@@ -782,6 +782,79 @@ describe('panel de control', () => {
     await page.setViewportSize({ width: 1200, height: 800 })
     assert.equal(await page.locator('.collapsed').count(), 0)
     assert.equal(await page.isVisible('#noisy'), true)
+    await ctx.close()
+  })
+
+  it('inglés: se elige con EN/ES, se recuerda, y no queda ningún texto en español (ni los que genera el servidor)', async () => {
+    // texto de la interfaz que parece español: palabras comunes o letras propias. Se ignoran el contenido de los eventos,
+    // los <code> (hay ejemplos como «English | Español» a propósito) y los elementos marcados data-i18n-skip.
+    const spanishLeftovers = (page) => page.evaluate(() => {
+      const out = []
+      const re = /[áéíóúñ¿¡]|\b(de|el|la|los|las|del|que|para|con|una|por|sin|hace|evento|eventos)\b/i
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+      for (let n; (n = w.nextNode()); ) {
+        const txt = n.nodeValue.trim()
+        const el = n.parentElement
+        if (!txt || !el || el.closest('script, style, code, [data-i18n-skip], .body, .keycard .name, td.reason, .why')) continue
+        if (re.test(txt)) out.push(txt.slice(0, 70))
+      }
+      for (const e of document.querySelectorAll('[title], [aria-label], [placeholder]')) {
+        if (e.closest('[data-i18n-skip]')) continue
+        for (const a of ['title', 'aria-label', 'placeholder']) { const v = e.getAttribute(a); if (v && re.test(v) && !e.closest('.body, .items code, #recent, #search-list')) out.push(`${a}=${v.slice(0, 60)}`) }
+      }
+      return [...new Set(out)]
+    })
+
+    const who = newKey()
+    await pub(who.sk, 1, 'nota en inglés de prueba')
+    for (let i = 0; i < 3; i++) await pub(who.sk, 1, 'q'.repeat(900))
+    const { ctx, page } = await openPanel({ locale: 'en-US' })
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'en', 'por defecto manda el idioma del navegador')
+    assert.equal(await page.innerText('h1'), 'Relay panel')
+    assert.equal(await page.title(), 'Relay panel')
+    assert.deepEqual(await spanishLeftovers(page), [], 'pantalla de entrada')
+
+    await login(page)
+    await refreshUntil(page, () => document.querySelectorAll('#noisy tbody tr .pk').length > 0 && document.querySelectorAll('#recent li').length > 0 && document.querySelectorAll('#rejections tbody tr').length > 0)
+    // ejercitar los textos que escribe el JavaScript: pestañas, búsqueda con fechas, acción de moderación y su historial
+    await page.click('.tabs [data-range="7d"]')
+    await page.waitForFunction(() => document.getElementById('hist-summary').children.length > 0, null, { timeout: 8000 })
+    await page.fill('#f-search [name=q]', who.pk)
+    await page.fill('#f-search [name=from]', await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10) }))
+    await page.click('#f-search button[type=submit]')
+    await page.waitForSelector('#search-out .resultinfo')
+    await sleep(300)
+    const info = (await page.innerText('#search-out .resultinfo')).replace(/\s+/g, ' ')
+    assert.match(info, /result\(s\): the key or id [0-9a-f]{12}… · since /, `resumen de búsqueda en inglés: ${info}`)
+    await page.fill('#f-info [name=contact]', 'owner@example.com')
+    assert.match(await clickAndToast(page, '#f-info button[type=submit]'), /Information saved/)
+    await page.fill('#f-ip [name=ip]', '203.0.113.20')
+    await page.fill('#f-ip [name=reason]', 'scraper')
+    assert.match(await clickAndToast(page, '#f-ip button[type=submit]'), /IP blocked/)
+    await page.fill('#f-kind [name=kind]', '9')
+    await page.selectOption('#f-kind [name=rule]', 'disallow')
+    assert.match(await clickAndToast(page, '#f-kind button[type=submit]'), /Rule applied/)
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('changed: contact'), null, { timeout: 8000 }) // el servidor lo manda en español: se traduce
+    assert.match(await page.innerText('#l-kinds'), /9 — forbidden/)
+    await page.click('#info-reset')
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('restored: '), null, { timeout: 8000 })
+    await page.evaluate(() => { document.getElementById('help').showModal() })
+    assert.deepEqual(await spanishLeftovers(page), [], 'panel completo (datos, búsqueda, historial y ayuda) sin restos en español')
+    assert.deepEqual(await page.evaluate(() => [...I18N.missing]), [], 'ninguna frase sin traducción en el diccionario')
+    await page.evaluate(() => document.getElementById('help').close())
+
+    // cambiar a español y volver; se recuerda al recargar
+    await page.click('[data-lang="es"]')
+    assert.equal(await page.innerText('h1'), 'Panel del relé')
+    assert.equal(await page.getAttribute('[data-lang="es"]', 'aria-pressed'), 'true')
+    await page.waitForFunction(() => document.getElementById('subtitle').textContent.startsWith('Versión'), null, { timeout: 8000 })
+    assert.match(await page.innerText('#cards'), /Eventos guardados/)
+    await page.reload()
+    await page.waitForSelector('#dash:not([hidden])')
+    assert.equal(await page.innerText('h1'), 'Panel del relé', 'la elección se recuerda')
+    await page.click('[data-lang="en"]')
+    assert.equal(await page.innerText('h1'), 'Relay panel')
+    await page.waitForFunction(() => document.getElementById('subtitle').textContent.startsWith('Version'), null, { timeout: 8000 })
     await ctx.close()
   })
 

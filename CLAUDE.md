@@ -127,6 +127,15 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**Panel i18n** (`static/admin/i18n.js` engine + `i18n.en.js` dictionary; Spanish is the source language): fixed HTML text is translated
+generically — a "unit" is an element whose children are only inline tags (`innerHTML`), or a loose text node, or a `title`/`aria-label`/`placeholder` — and looked
+up by an FNV-1a hash of the Spanish original in `PANEL_EN.html` (no markup needed in `index.html`; `data-i18n-skip` opts out). Text written by JS goes through
+`t('texto en español', {vars})` (`PANEL_EN.ui`, keyed by the Spanish phrase, `{x}` placeholders). Spanish strings that the *server* sends (search `what`, history
+`detail`) are translated by regex rules in `I18N.tx()`. **Adding or changing any user-facing text**: edit the Spanish, then run the panel tests — the English test
+fails listing what is untranslated; `I18N.missing` entries look like `html:5c679508 Idioma: los botones…` (key + start of the text), add that key to `i18n.en.js`.
+Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the translator). Section-fold state is keyed by the Spanish h2 text kept in `data-fold-key`
+(set before the first translation). The stored reasons for bans made from the panel are written in the UI language at the time.
+
 **Phone layout** (end of `static/admin/admin.css`, `@media (max-width:700px), (pointer:coarse)` + `(max-width:700px)`): grids need `min-width:0`
 (a table inside a grid item made the page 535 px wide on a 390 px phone); inputs must be ≥16 px or iOS zooms on focus; tap targets ≥40–44 px; tables get class `stack`
 (set by `labelTable()` in `admin.js`, which also writes each cell's `data-label` from its `<th>`; the CSS prints it with `td::before`, so `innerText` doesn't

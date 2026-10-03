@@ -17,6 +17,10 @@
       </div>
       <div class="actions">
         <span id="updated" class="muted" aria-live="off"></span>
+        <div class="lang" role="group" aria-label="Idioma / Language" data-i18n-skip>
+          <button type="button" data-lang="en" aria-pressed="false" title="English">EN</button>
+          <button type="button" data-lang="es" aria-pressed="false" title="Español">ES</button>
+        </div>
         <button type="button" id="help-btn" class="ghost" aria-haspopup="dialog">Ayuda</button>
         <button type="button" id="refresh" hidden>Actualizar</button>
         <button type="button" id="logout" hidden>Cerrar sesión</button>
@@ -404,6 +408,7 @@
           <li><b>Desde el móvil, sin extensión</b>: abre «Entrar desde el móvil con un firmador remoto» y pulsa <b>Conectar</b>. Sale un enlace <code>nostrconnect://</code>: pulsa <b>Abrir Clave</b> (o cópialo y pégalo en la app), <b>aprueba</b> la conexión y vuelve a la página; después aprueba también la firma del inicio de sesión. Es el estándar <b>NIP-46</b>: la clave se queda en la app firmadora (Clave en el iPhone, por ejemplo) y el panel solo recibe la firma. El intercambio pasa por este mismo relé, cifrado de extremo a extremo; mientras estás en la otra app el relé guarda esos mensajes <b>10 minutos</b> en memoria para que la página los recoja al volver. Solo entra la clave del dueño, igual que con la extensión.</li>
           <li>La sesión dura una hora y se guarda en una cookie que la página no puede leer. <b>Cerrar sesión</b> la invalida al instante. Si caduca, el panel te lo dice y vuelve a la pantalla de entrada.</li>
           <li><b>En el móvil</b> las secciones se pliegan: toca el título (la flechita de la derecha lo indica) para abrirla o cerrarla. «Actividad» sale abierta y las demás cerradas; el panel recuerda lo que abres en ese navegador. El «?» de cada título sigue abriendo la ayuda sin plegar nada, y si lanzas una búsqueda desde otra sección, «Buscar» se abre sola. En el ordenador todo está siempre abierto.</li>
+          <li><b>Idioma</b>: los botones <b>EN</b> / <b>ES</b> de arriba cambian el panel entre inglés y español, ayuda incluida. Se recuerda en ese navegador; la primera vez manda el idioma del navegador.</li>
           <li>Tras cada acción de moderación aparece un <b>aviso</b> arriba con el resultado (verde) o el error (rojo).</li>
           <li>El panel nunca muestra direcciones IP ni el contenido de los mensajes privados.</li>
         </ul>
@@ -424,6 +429,8 @@
       </section>
     </div>
   </dialog>
+  <script src="/admin/i18n.en.js"></script>
+  <script src="/admin/i18n.js"></script>
   <script src="/admin/admin.js"></script>
 </body>
 </html>

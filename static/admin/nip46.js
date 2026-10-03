@@ -11,6 +11,7 @@
 // guarda unos minutos los mensajes 24133 para entregárselos entonces.
 import { generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip44, bytesToHex } from './vendor/nostr.js'
 
+const t = (es, vars) => window.I18N.t(es, vars) // traduce un texto del panel (ver i18n.js)
 const KIND = 24133
 const randomHex = (n) => bytesToHex(crypto.getRandomValues(new Uint8Array(n)))
 const noSlash = (u) => u.replace(/\/+$/, '')
@@ -49,17 +50,17 @@ export function createSession({ name = 'Panel de control del relé', permissions
   function connect(c) {
     if (closed || (c.ws && (c.ws.readyState === WebSocket.OPEN || c.ws.readyState === WebSocket.CONNECTING))) return
     clearTimeout(c.timer)
-    onStatus(`Conectando con ${c.label}…`)
+    onStatus(t('Conectando con {r}…', { r: c.label }))
     let ws
     try { ws = new WebSocket(c.url) } catch (err) {
-      onStatus(`No se pudo abrir la conexión con ${c.label}: ${err.message}`)
+      onStatus(t('No se pudo abrir la conexión con {r}: {e}', { r: c.label, e: err.message }))
       c.timer = setTimeout(() => connect(c), 3000)
       return
     }
     c.ws = ws
     ws.addEventListener('open', () => {
       if (c.ws !== ws) return
-      onStatus(`${c.label} conectado ✓`)
+      onStatus(t('{r} conectado ✓', { r: c.label }))
       c.retry = 0
       // `since` con margen: tras una suspensión se piden de nuevo los mensajes recientes.
       ws.send(JSON.stringify(['REQ', 'n46', { kinds: [KIND], '#p': [clientPk], since: startedAt - 30 }]))
@@ -68,7 +69,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
     ws.addEventListener('message', (m) => { if (c.ws === ws) onMessage(c, m.data) })
     ws.addEventListener('close', () => {
       if (c.ws !== ws || closed) return
-      onStatus(`Conexión con ${c.label} perdida; reintentando…`)
+      onStatus(t('Conexión con {r} perdida; reintentando…', { r: c.label }))
       c.timer = setTimeout(() => connect(c), Math.min(1000 * 2 ** c.retry++, 5000))
     })
     ws.addEventListener('error', () => {}) // el 'close' que sigue reintenta
@@ -77,10 +78,10 @@ export function createSession({ name = 'Panel de control del relé', permissions
   function onMessage(c, data) {
     let msg
     try { msg = JSON.parse(data) } catch { return }
-    if (msg[0] === 'OK' && msg[2] === true) onStatus(`Mensaje enviado a ${c.label} ✓`)
+    if (msg[0] === 'OK' && msg[2] === true) onStatus(t('Mensaje enviado a {r} ✓', { r: c.label }))
     if (msg[0] === 'OK' && msg[2] === false) {
       // Un relé rechazó lo que enviamos (límite de velocidad, etc.). Solo es grave si todos fallan, así que se avisa y se sigue.
-      onStatus(`${c.label} rechazó el mensaje: ${msg[3] || 'sin motivo'}`)
+      onStatus(t('{r} rechazó el mensaje: {m}', { r: c.label, m: msg[3] || t('sin motivo') }))
       return
     }
     if (msg[0] !== 'EVENT' || !msg[2]) return
@@ -90,11 +91,11 @@ export function createSession({ name = 'Panel de control del relé', permissions
     let body
     try {
       body = JSON.parse(nip44.decrypt(ev.content, nip44.getConversationKey(clientSk, ev.pubkey)))
-    } catch { onStatus('Ha llegado un mensaje al panel que no se ha podido descifrar'); return } // no era para nosotros o está mal cifrado
+    } catch { onStatus(t('Ha llegado un mensaje al panel que no se ha podido descifrar')); return } // no era para nosotros o está mal cifrado
     if (!signerPk) {
       // La primera respuesta válida es la aceptación de la conexión: debe devolver el secreto que pusimos en el enlace.
-      if (body.result === secret) { signerPk = ev.pubkey; onStatus(`Firmador emparejado ✓ (por ${c.label})`); resolveReady(signerPk) }
-      else onStatus('Ha llegado una respuesta del firmador, pero no con el secreto esperado')
+      if (body.result === secret) { signerPk = ev.pubkey; onStatus(t('Firmador emparejado ✓ (por {r})', { r: c.label })); resolveReady(signerPk) }
+      else onStatus(t('Ha llegado una respuesta del firmador, pero no con el secreto esperado'))
       return
     }
     if (ev.pubkey !== signerPk) return // después de emparejar, solo se hace caso a ese firmador
@@ -110,7 +111,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
   // Al volver a la pestaña o recuperar la red, se reconecta sin esperar.
   const wake = () => { if (!closed) for (const c of conns) if (!c.ws || c.ws.readyState !== WebSocket.OPEN) { c.retry = 0; connect(c) } }
   const onVisible = () => { if (document.visibilityState === 'visible') wake() }
-  const onViolation = (e) => onStatus(`El navegador ha bloqueado algo por la política de seguridad: ${e.violatedDirective} (${e.blockedURI || 'sin dirección'})`)
+  const onViolation = (e) => onStatus(t('El navegador ha bloqueado algo por la política de seguridad: {d} ({u})', { d: e.violatedDirective, u: e.blockedURI || t('sin dirección') }))
   document.addEventListener('securitypolicyviolation', onViolation)
   document.addEventListener('visibilitychange', onVisible)
   window.addEventListener('online', wake)
@@ -124,16 +125,16 @@ export function createSession({ name = 'Panel de control del relé', permissions
     relays,
     /** Se resuelve con la clave del firmador cuando acepta la conexión. */
     waitForSigner(ms = 180000) {
-      return Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error('no se ha aprobado la conexión a tiempo')), ms))])
+      return Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error(t('no se ha aprobado la conexión a tiempo'))), ms))])
     },
     /** Pide algo al firmador y espera su respuesta (el usuario puede tardar en aprobar). Se envía por todos los relés. */
     request(method, args = [], ms = 120000) {
-      if (!signerPk) return Promise.reject(new Error('el firmador aún no se ha conectado'))
+      if (!signerPk) return Promise.reject(new Error(t('el firmador aún no se ha conectado')))
       const id = randomHex(8)
       const content = nip44.encrypt(JSON.stringify({ id, method, params: args }), nip44.getConversationKey(clientSk, signerPk))
       const ev = finalizeEvent({ kind: KIND, created_at: Math.floor(Date.now() / 1000), tags: [['p', signerPk]], content }, clientSk)
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => { pending.delete(id); reject(new Error('el firmador no ha contestado a tiempo')) }, ms)
+        const timeout = setTimeout(() => { pending.delete(id); reject(new Error(t('el firmador no ha contestado a tiempo'))) }, ms)
         pending.set(id, { resolve, reject, timeout })
         for (const c of conns) {
           if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(['EVENT', ev]))
@@ -147,9 +148,9 @@ export function createSession({ name = 'Panel de control del relé', permissions
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', wake)
       window.removeEventListener('pageshow', wake)
-      for (const p of pending.values()) { clearTimeout(p.timeout); p.reject(new Error('cancelado')) }
+      for (const p of pending.values()) { clearTimeout(p.timeout); p.reject(new Error(t('cancelado'))) }
       pending.clear()
-      rejectReady(new Error('cancelado'))
+      rejectReady(new Error(t('cancelado')))
       for (const c of conns) { clearTimeout(c.timer); try { c.ws && c.ws.close() } catch { /* ya cerrado */ } }
     },
   }

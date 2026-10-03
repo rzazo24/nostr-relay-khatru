@@ -30,6 +30,24 @@
       <p>Este panel es solo para el dueño del relé. Entras firmando con tu clave de Nostr (extensión NIP-07, por ejemplo nos2x): la clave privada nunca sale de la extensión.</p>
       <button type="button" id="login-btn" class="primary">Entrar con Nostr</button>
       <p id="login-msg" class="msg" role="status"></p>
+
+      <details id="remote-login" class="remote">
+        <summary>Entrar desde el móvil con un firmador remoto (Clave en el iPhone…)</summary>
+        <p class="muted small">Sin extensión en el navegador: la clave se queda en la app firmadora (por ejemplo <b>Clave</b>, que usa el estándar NIP-46) y el panel solo recibe la firma. El intercambio pasa por este mismo relé.</p>
+        <button type="button" id="remote-btn">Conectar con un firmador remoto</button>
+        <div id="remote-box" hidden>
+          <ol class="small">
+            <li>Pulsa <b>Abrir Clave</b> (o copia el enlace y pégalo en la app) y <b>aprueba</b> la conexión.</li>
+            <li>Vuelve a esta página: seguirá sola. Tendrás que aprobar también la firma del inicio de sesión.</li>
+          </ol>
+          <p class="btns">
+            <a id="remote-link" class="btnlike primary" href="#">Abrir Clave</a>
+            <button type="button" id="remote-copy">Copiar enlace</button>
+            <button type="button" id="remote-cancel">Cancelar</button>
+          </p>
+          <p id="remote-msg" class="msg" role="status"></p>
+        </div>
+      </details>
     </section>
 
     <div id="dash" hidden>
@@ -382,6 +400,7 @@
           <li>Bajo el título ves la <b>versión</b> del relé (el identificador del código que está en marcha, por ejemplo <code>9cd2f05</code>) y <b>cuánto tiempo lleva en marcha</b> desde su último arranque.</li>
           <li>«Actualizado a las…» indica cuándo se pidieron los datos por última vez. Se actualizan solos cada 15 segundos (mientras la pestaña está visible); <b>Actualizar</b> los refresca al momento.</li>
           <li>Entras firmando con la clave del dueño (extensión como nos2x). La clave privada nunca sale de la extensión.</li>
+          <li><b>Desde el móvil, sin extensión</b>: abre «Entrar desde el móvil con un firmador remoto» y pulsa <b>Conectar</b>. Sale un enlace <code>nostrconnect://</code>: pulsa <b>Abrir Clave</b> (o cópialo y pégalo en la app), <b>aprueba</b> la conexión y vuelve a la página; después aprueba también la firma del inicio de sesión. Es el estándar <b>NIP-46</b>: la clave se queda en la app firmadora (Clave en el iPhone, por ejemplo) y el panel solo recibe la firma. El intercambio pasa por este mismo relé, cifrado de extremo a extremo; mientras estás en la otra app el relé guarda esos mensajes <b>10 minutos</b> en memoria para que la página los recoja al volver. Solo entra la clave del dueño, igual que con la extensión.</li>
           <li>La sesión dura una hora y se guarda en una cookie que la página no puede leer. <b>Cerrar sesión</b> la invalida al instante. Si caduca, el panel te lo dice y vuelve a la pantalla de entrada.</li>
           <li>Tras cada acción de moderación aparece un <b>aviso</b> arriba con el resultado (verde) o el error (rojo).</li>
           <li>El panel nunca muestra direcciones IP ni el contenido de los mensajes privados.</li>

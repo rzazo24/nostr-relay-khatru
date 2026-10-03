@@ -13,6 +13,7 @@ import WebSocket from 'ws'
 import { Relay, useWebSocketImplementation } from 'nostr-tools/relay'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import * as nip19 from 'nostr-tools/nip19'
+import * as nip44 from 'nostr-tools/nip44'
 import { startStack } from './harness.mjs'
 
 useWebSocketImplementation(WebSocket)
@@ -97,6 +98,36 @@ async function refreshUntil(page, cond, arg) {
 
 const newKey = () => { const sk = generateSecretKey(); return { sk, pk: getPublicKey(sk) } }
 
+/** Un firmador NIP-46 de mentira (lo que haría Clave): abre el enlace nostrconnect://, acepta la conexión y firma. */
+function mockSigner(uri, { userSecret = null, onReplied = () => {} } = {}) {
+  const u = new URL(uri)
+  const clientPk = u.hostname
+  const secret = u.searchParams.get('secret')
+  const userSk = userSecret ?? stack.ownerSecret
+  const signerSk = generateSecretKey()
+  const signerPk = getPublicKey(signerSk)
+  const key = nip44.getConversationKey(signerSk, clientPk)
+  const ws = new WebSocket(stack.relayWs)
+  const reply = (obj) => ws.send(JSON.stringify(['EVENT', finalizeEvent({ kind: 24133, created_at: now(), tags: [['p', clientPk]], content: nip44.encrypt(JSON.stringify(obj), key) }, signerSk)]))
+  const seen = { methods: [] }
+  ws.on('open', () => {
+    ws.send(JSON.stringify(['REQ', 's', { kinds: [24133], '#p': [signerPk], since: now() - 30 }]))
+    reply({ id: Math.random().toString(16).slice(2), result: secret }) // aceptación de la conexión
+    onReplied()
+  })
+  ws.on('message', (raw) => {
+    const m = JSON.parse(raw)
+    if (m[0] !== 'EVENT') return
+    let req
+    try { req = JSON.parse(nip44.decrypt(m[2].content, key)) } catch { return }
+    seen.methods.push(req.method)
+    if (req.method === 'get_public_key') reply({ id: req.id, result: getPublicKey(userSk) })
+    else if (req.method === 'sign_event') reply({ id: req.id, result: JSON.stringify(finalizeEvent(JSON.parse(req.params[0]), userSk)) })
+    else reply({ id: req.id, error: 'método no soportado' })
+  })
+  return { seen, close: () => ws.close() }
+}
+
 describe('panel de control', () => {
   before(async () => {
     stack = await startStack()
@@ -154,7 +185,7 @@ describe('panel de control', () => {
     const someone = newKey(), other = newKey()
     await pub(someone.sk, 1, 'Hola desde el panel <img src=x onerror="window.__xss=1"> <script>window.__xss=2</script>')
     await pub(other.sk, 4, 'mensaje privado secreto', [['p', stack.ownerPk]])
-    await pub(someone.sk, 1, 'x'.repeat(300)) // rechazada por tamaño: aparece en Rechazos
+    await pub(someone.sk, 1, 'x'.repeat(900)) // rechazada por tamaño: aparece en Rechazos
     const { ctx, page } = await openPanel()
     await login(page)
     await refreshUntil(page, () => document.querySelectorAll('#recent li').length > 0 && document.querySelectorAll('#rejections tbody tr').length > 0)
@@ -328,9 +359,9 @@ describe('panel de control', () => {
 
   it('claves más ruidosas: ranking de rechazos, copiar la clave, buscar y banear (la del dueño no se puede banear)', async () => {
     const loud = newKey(), quiet = newKey()
-    for (let i = 0; i < 4; i++) await pub(loud.sk, 1, 'z'.repeat(300)) // demasiado largo: rechazado
-    await pub(quiet.sk, 1, 'z'.repeat(300))
-    await pub(stack.ownerSecret, 1, 'z'.repeat(300)) // el dueño también, para ver que no se ofrece banearlo
+    for (let i = 0; i < 4; i++) await pub(loud.sk, 1, 'z'.repeat(900)) // demasiado largo: rechazado
+    await pub(quiet.sk, 1, 'z'.repeat(900))
+    await pub(stack.ownerSecret, 1, 'z'.repeat(900)) // el dueño también, para ver que no se ofrece banearlo
     const { ctx, page } = await openPanel()
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(stack.panelUrl).origin })
     await login(page)
@@ -422,7 +453,7 @@ describe('panel de control', () => {
     for (let i = 0; i < 70; i++) await pub(ana.sk, 1, `nota de ana ${i}`, [], 100 + i)
     await pub(bea.sk, 1, 'hola desde bea unico-marcador-e2e'); await pub(bea.sk, 7, '+')
     await pub(bea.sk, 4, 'mensaje privado secreto', [['p', ana.pk]])
-    await pub(bea.sk, 1, 'y'.repeat(300)) // rechazada: da una clave abreviada en Rechazos
+    await pub(bea.sk, 1, 'y'.repeat(900)) // rechazada: da una clave abreviada en Rechazos
 
     const { ctx, page } = await openPanel()
     await login(page)
@@ -545,6 +576,90 @@ describe('panel de control', () => {
     await page.click('#search-clear')
     assert.equal(await page.inputValue('#f-search [name=from]'), '')
     assert.equal(await page.locator('#search-out *').count(), 0)
+    await ctx.close()
+  })
+
+  it('entrar con un firmador remoto (NIP-46, como Clave): enlace nostrconnect, aprobación y firma', async () => {
+    const { ctx, page } = await openPanel({ extension: false })
+    assert.equal(await page.isVisible('#remote-box'), false)
+    assert.equal(await page.evaluate(() => document.getElementById('remote-login').open), true, 'sin extensión, el apartado remoto sale abierto')
+    await page.click('#remote-btn')
+    await page.waitForSelector('#remote-link[href^="nostrconnect://"]')
+    const uri = await page.getAttribute('#remote-link', 'href')
+    const u = new URL(uri)
+    assert.match(u.hostname, /^[0-9a-f]{64}$/, 'la clave del cliente va en el enlace')
+    assert.equal(u.searchParams.get('relay'), `ws://${new URL(stack.panelUrl).host}/`, 'el intercambio pasa por el relé del propio panel')
+    assert.match(u.searchParams.get('secret'), /^[0-9a-f]{32}$/)
+    assert.equal(u.searchParams.get('perms'), 'sign_event:27235')
+    assert.equal(u.searchParams.get('callback'), new URL(stack.panelUrl).origin + '/admin/')
+    assert.match(await page.innerText('#remote-msg'), /Esperando a que apruebes/)
+
+    const signer = mockSigner(uri)
+    await page.waitForSelector('#dash:not([hidden])', { timeout: 15000 })
+    assert.deepEqual(signer.seen.methods, ['sign_event'], 'solo se pide firmar el inicio de sesión, nada más')
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('Inicio de sesión'), null, { timeout: 8000 })
+    signer.close()
+    await ctx.close()
+  })
+
+  it('entrar con un firmador remoto: sobrevive a que la página se suspenda mientras apruebas (buzón del relé)', async () => {
+    const { ctx, page } = await openPanel({ extension: false })
+    let mode = 'pass'
+    const live = new Set()
+    await page.routeWebSocket(/^ws:\/\/127\.0\.0\.1:\d+\/$/, (ws) => {
+      live.add(ws)
+      if (mode === 'pass') ws.connectToServer()
+      // en modo 'block' la conexión queda muerta: lo que envíe la página no llega y no recibe nada (como un Safari suspendido)
+    })
+    await page.reload() // la interceptación solo vale para páginas cargadas después de instalarla
+    assert.equal(await page.evaluate(() => document.getElementById('remote-login').open), true, 'sin extensión, el apartado remoto sale abierto')
+    await page.click('#remote-btn')
+    await page.waitForSelector('#remote-link[href^="nostrconnect://"]')
+    const uri = await page.getAttribute('#remote-link', 'href')
+    await page.waitForFunction(() => true)
+    await sleep(500) // la página ya está conectada y suscrita
+
+    mode = 'block' // se suspende: la conexión se corta y no hay forma de volver a conectar
+    for (const ws of [...live]) ws.close()
+    live.clear()
+    await sleep(300)
+    let replied
+    const repliedP = new Promise((r) => { replied = r })
+    const signer = mockSigner(uri, { onReplied: replied })
+    await repliedP // el firmador aprueba mientras la página no escucha
+    await sleep(800)
+    assert.equal(await page.isVisible('#dash'), false, 'aún sin entrar: la respuesta no ha llegado')
+
+    mode = 'pass' // la página despierta
+    for (const ws of [...live]) ws.close() // las reconexiones bloqueadas se cortan y la siguiente ya pasa
+    await page.waitForSelector('#dash:not([hidden])', { timeout: 20000 })
+    assert.deepEqual(signer.seen.methods, ['sign_event'])
+    signer.close()
+    await ctx.close()
+  })
+
+  it('entrar con un firmador remoto: una clave que no es la del dueño no entra, y cancelar limpia todo', async () => {
+    const stranger = newKey()
+    const { ctx, page } = await openPanel({ extension: false })
+    assert.equal(await page.evaluate(() => document.getElementById('remote-login').open), true, 'sin extensión, el apartado remoto sale abierto')
+    await page.click('#remote-btn')
+    await page.waitForSelector('#remote-link[href^="nostrconnect://"]')
+    const signer = mockSigner(await page.getAttribute('#remote-link', 'href'), { userSecret: stranger.sk })
+    await page.waitForFunction(() => document.getElementById('login-msg').textContent.includes('No se pudo entrar'), null, { timeout: 15000 })
+    assert.match(await page.innerText('#login-msg'), /owner|dueño/i)
+    assert.equal(await page.isVisible('#dash'), false)
+    assert.equal(await page.isVisible('#remote-box'), false, 'el cuadro se cierra tras el fallo')
+    signer.close()
+
+    await page.click('#remote-btn')
+    await page.waitForSelector('#remote-link[href^="nostrconnect://"]')
+    const first = await page.getAttribute('#remote-link', 'href')
+    await page.click('#remote-cancel')
+    assert.equal(await page.isVisible('#remote-box'), false)
+    assert.equal(await page.isVisible('#remote-btn'), true)
+    await page.click('#remote-btn')
+    await page.waitForSelector('#remote-link[href^="nostrconnect://"]')
+    assert.notEqual(await page.getAttribute('#remote-link', 'href'), first, 'cada intento usa claves y secreto nuevos')
     await ctx.close()
   })
 

@@ -127,6 +127,16 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**NIP-46 login** (`static/admin/nip46.js`, lazy-loaded by `loginRemote()`; vendored crypto in `static/admin/vendor/nostr.js`, built by
+`scripts/build-admin-vendor.sh` from `tools/admin-vendor-entry.mjs`): client-initiated `nostrconnect://` flow over *this* relay (the panel's
+own `ws(s)://<host>/`, covered by CSP `connect-src 'self'`). First valid kind-24133 whose decrypted `result` equals the URI secret pairs the signer;
+then only `sign_event` for the NIP-98 login event is requested (no `get_public_key`: the server checks the signature belongs to the owner).
+`internal/server/mailbox.go` keeps 24133 events 10 min in memory and answers REQs that have `kinds:[24133]` + `#p`; it registers an
+`OnEphemeralEvent` hook, which also stops khatru answering `mute: no one was listening`. **Gotcha:** khatru ranges over every `QueryEvents`
+channel internally, so a query function must never return a nil channel (it deadlocked normal publishes). NIP-46 messages are ~400 chars, so
+the content-length limit must stay above that (tests use 800). Untested with a real Clave: Clave may only listen on its own bunker relay
+(`relay.powr.build`) when backgrounded — if so, add that relay to the URI **and** to the Caddyfile `connect-src`.
+
 **Backup download** (`GET /admin/api/backup`, `admin/backup.go`): `VACUUM INTO <tmp next to the DB>` over its *own* `mode=ro` connection
 (the panel's `_query_only` connection can't run VACUUM INTO), gzipped on the fly, tmp deleted after; one at a time (`backupBusy`, 429 otherwise),
 refuses `Sec-Fetch-Site: cross-site`, logged as action `backup`. Frontend fetches it into a Blob (fine under the strict CSP) — fine for DBs up to a

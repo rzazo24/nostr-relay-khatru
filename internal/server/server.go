@@ -57,6 +57,7 @@ type Server struct {
 	stop    context.CancelFunc // detiene las tareas de fondo (retención, volcado de estadísticas)
 	stats   *stats.Store
 	done    sync.WaitGroup // espera a que acaben las tareas de fondo al cerrar
+	mail    *mailbox       // mensajes de NIP-46 de los últimos minutos (ver mailbox.go)
 	conns   atomic.Int64   // conexiones WebSocket abiertas ahora
 	live    sync.Map       // *khatru.WebSocket de las conexiones contadas (khatru llama a OnDisconnect dos veces por conexión)
 }
@@ -116,6 +117,11 @@ func New(cfg config.Config, version string) (*Server, error) {
 
 	relay.StoreEvent = append(relay.StoreEvent, db.SaveEvent)
 	relay.QueryEvents = append(relay.QueryEvents, s.query)
+	// Buzón de NIP-46 (kind 24133): ver mailbox.go. Registrar un OnEphemeralEvent hace además que khatru no conteste
+	// «mute: no one was listening» a los efímeros que nadie escuchaba.
+	s.mail = newMailbox(time.Now)
+	relay.OnEphemeralEvent = append(relay.OnEphemeralEvent, func(ctx context.Context, ev *nostr.Event) { s.mail.Add(ev) })
+	relay.QueryEvents = append(relay.QueryEvents, s.mail.query)
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)

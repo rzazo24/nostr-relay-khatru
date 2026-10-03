@@ -60,6 +60,62 @@ function show(view) {
   $('refresh').hidden = view !== 'dash'
 }
 
+// El evento que se firma para entrar (NIP-98): lo mismo con una extensión que con un firmador remoto.
+const loginTemplate = () => ({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: [['u', `${location.origin}/admin/api/login`], ['method', 'POST']], content: '' })
+
+async function sendLogin(signed) {
+  const res = await fetch('/admin/api/login', { method: 'POST', headers: { Authorization: 'Nostr ' + btoa(JSON.stringify(signed)) }, credentials: 'same-origin' })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || `error ${res.status}`)
+}
+
+// ---------- entrar con un firmador remoto (NIP-46, p. ej. Clave en el iPhone) ----------
+
+let remote = null // sesión NIP-46 en curso
+
+function remoteReset() {
+  if (remote) { remote.close(); remote = null }
+  $('remote-box').hidden = true
+  $('remote-btn').hidden = false
+  $('remote-link').removeAttribute('href')
+}
+
+async function loginRemote() {
+  const msg = $('remote-msg')
+  const say = (t, err) => { msg.className = err ? 'msg err' : 'msg'; msg.textContent = t }
+  remoteReset()
+  $('remote-btn').hidden = true
+  $('remote-box').hidden = false
+  say('Preparando la conexión…')
+  let session
+  try {
+    const { createSession } = await import('/admin/nip46.js')
+    session = remote = createSession({ onAuthUrl: (u) => say(`El firmador pide abrir esta dirección para continuar: ${u}`) })
+  } catch (err) {
+    remoteReset()
+    $('login-msg').className = 'msg err'
+    $('login-msg').textContent = `No se pudo preparar la conexión: ${err.message || err}`
+    return
+  }
+  $('remote-link').setAttribute('href', session.uri)
+  say('Esperando a que apruebes la conexión en la app firmadora…')
+  try {
+    await session.waitForSigner()
+    say('Conectado. Aprueba ahora la firma del inicio de sesión en la app…')
+    const signed = JSON.parse(await session.request('sign_event', [JSON.stringify(loginTemplate())]))
+    if (!signed || signed.kind !== 27235 || typeof signed.sig !== 'string') throw new Error('el firmador devolvió algo que no es la firma pedida')
+    await sendLogin(signed)
+    remoteReset()
+    $('login-msg').textContent = ''
+    start()
+  } catch (err) {
+    if (remote !== session) return // se canceló o se empezó de nuevo
+    remoteReset()
+    $('login-msg').className = 'msg err'
+    $('login-msg').textContent = `No se pudo entrar: ${err.message || err}`
+  }
+}
+
 async function login() {
   const msg = $('login-msg')
   msg.className = 'msg'
@@ -70,11 +126,7 @@ async function login() {
   }
   msg.textContent = 'Firma la petición en la extensión…'
   try {
-    const url = `${location.origin}/admin/api/login`
-    const signed = await window.nostr.signEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: [['u', url], ['method', 'POST']], content: '' })
-    const res = await fetch('/admin/api/login', { method: 'POST', headers: { Authorization: 'Nostr ' + btoa(JSON.stringify(signed)) }, credentials: 'same-origin' })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body.error || `error ${res.status}`)
+    await sendLogin(await window.nostr.signEvent(loginTemplate()))
     msg.textContent = ''
     start()
   } catch (err) {
@@ -630,7 +682,15 @@ document.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('clic
 
 // ---------- arranque ----------
 
+if (!window.nostr) $('remote-login').open = true // sin extensión (un móvil), lo normal es entrar con un firmador remoto
 $('login-btn').addEventListener('click', login)
+$('remote-btn').addEventListener('click', loginRemote)
+$('remote-cancel').addEventListener('click', () => { remoteReset(); $('login-msg').textContent = '' })
+$('remote-copy').addEventListener('click', () => {
+  const href = $('remote-link').getAttribute('href')
+  if (!href) return
+  navigator.clipboard.writeText(href).then(() => toast('Enlace copiado', false)).catch(() => toast('No se pudo copiar el enlace', true))
+})
 $('logout').addEventListener('click', logout)
 $('refresh').addEventListener('click', () => load().catch((e) => { $('updated').textContent = `Error al actualizar: ${e.message}` }))
 document.addEventListener('visibilitychange', () => { if (!document.hidden && timer && Date.now() - lastOk > REFRESH_MS) load().catch(() => {}) })

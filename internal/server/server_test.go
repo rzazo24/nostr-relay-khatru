@@ -1631,3 +1631,59 @@ func TestAdminSearch_DateRange(t *testing.T) {
 		}
 	}
 }
+
+func TestMailbox_Nip46MessagesAreReplayedToTheRecipient(t *testing.T) {
+	_, ts := start(t, nil)
+	signer, client, other := newKeys(), newKeys(), newKeys()
+	pub := connect(t, ts)
+
+	// el firmador responde cuando nadie escucha: antes se rechazaba con «mute»; ahora el buzón lo guarda
+	reply := signer.event(24133, "cifrado", nostr.Tags{{"p", client.pk}})
+	if err := publish(pub, reply); err != nil {
+		t.Fatalf("un evento 24133 sin oyentes debe aceptarse: %v", err)
+	}
+	publish(pub, signer.event(24133, "para otro", nostr.Tags{{"p", other.pk}}))
+	publish(pub, signer.event(20001, "efímero cualquiera", nostr.Tags{{"p", client.pk}})) // no es 24133: no se guarda
+
+	late := connect(t, ts) // el cliente vuelve después (la página estuvo suspendida)
+	got, _ := fetch(t, late, nostr.Filter{Kinds: []int{24133}, Tags: nostr.TagMap{"p": {client.pk}}})
+	if len(got) != 1 || got[0].ID != reply.ID {
+		t.Fatalf("debe recibir solo lo suyo: %d eventos", len(got))
+	}
+	if got, _ := fetch(t, late, nostr.Filter{Kinds: []int{24133}}); len(got) != 0 {
+		t.Fatal("sin `#p` no se entrega nada (no se puede pedir todo lo que haya)")
+	}
+	if got, _ := fetch(t, late, nostr.Filter{Kinds: []int{20001}, Tags: nostr.TagMap{"p": {client.pk}}}); len(got) != 0 {
+		t.Fatal("el resto de efímeros siguen sin guardarse")
+	}
+	if got, _ := fetch(t, late, nostr.Filter{Kinds: []int{24133}, Since: ptrTs(nostr.Now() + 100), Tags: nostr.TagMap{"p": {client.pk}}}); len(got) != 0 {
+		t.Fatal("since se respeta")
+	}
+}
+
+func ptrTs(t nostr.Timestamp) *nostr.Timestamp { return &t }
+
+func TestMailbox_ExpiresAndIsBounded(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	m := newMailbox(func() time.Time { return now })
+	k := newKeys()
+	for i := 0; i < mailboxMax+50; i++ {
+		ev := nostr.Event{Kind: 24133, Content: "x", CreatedAt: nostr.Timestamp(now.Unix()) + nostr.Timestamp(i), PubKey: k.pk, Tags: nostr.Tags{{"p", k.pk}}}
+		ev.Sign(k.sk)
+		m.Add(&ev)
+	}
+	f := nostr.Filter{Kinds: []int{24133}, Tags: nostr.TagMap{"p": {k.pk}}}
+	if n := len(m.Query(f)); n != mailboxMax {
+		t.Fatalf("máximo %d, hay %d", mailboxMax, n)
+	}
+	big := nostr.Event{Kind: 24133, Content: strings.Repeat("a", mailboxMaxSize+1), CreatedAt: nostr.Now(), PubKey: k.pk, Tags: nostr.Tags{{"p", k.pk}}}
+	big.Sign(k.sk)
+	m.Add(&big)
+	if n := len(m.Query(f)); n != mailboxMax {
+		t.Fatal("un mensaje demasiado grande no se guarda")
+	}
+	now = now.Add(mailboxTTL + time.Second)
+	if n := len(m.Query(f)); n != 0 {
+		t.Fatalf("a los %v desaparece todo, quedan %d", mailboxTTL, n)
+	}
+}

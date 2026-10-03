@@ -50,7 +50,7 @@ export async function startStack(extraEnv = {}) {
       RELAY_NAME: 'Relé de pruebas', RELAY_DESCRIPTION: 'Descripción original',
       // límites de velocidad altos: las pruebas publican muchos eventos seguidos
       RELAY_EVENTS_PER_MINUTE: '1000000', RELAY_EVENTS_BURST: '1000000', RELAY_REQS_PER_MINUTE: '1000000', RELAY_REQS_BURST: '1000000', RELAY_CONNS_PER_MINUTE: '1000000', RELAY_CONNS_BURST: '1000000',
-      RELAY_MAX_CONTENT_LENGTH: '200', RELAY_RETENTION_DAYS: '180', RELAY_BACKUP_DIR: backupDir,
+      RELAY_MAX_CONTENT_LENGTH: '800', RELAY_RETENTION_DAYS: '180', RELAY_BACKUP_DIR: backupDir,
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -77,6 +77,18 @@ export async function startStack(extraEnv = {}) {
     res.writeHead(200, headers)
     fs.createReadStream(file).pipe(res)
   }).listen(panelPort, '127.0.0.1')
+  // Como Caddy en producción, el WebSocket del relé cuelga de la misma dirección que el panel (el panel NIP-46 conecta a `ws://<su host>/`).
+  server.on('upgrade', (req, socket, head) => {
+    const up = net.connect(relayPort, '127.0.0.1', () => {
+      let raw = `${req.method} ${req.url} HTTP/1.1\r\n`
+      for (let i = 0; i < req.rawHeaders.length; i += 2) raw += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`
+      up.write(raw + '\r\n')
+      up.write(head)
+      socket.pipe(up).pipe(socket)
+    })
+    up.on('error', () => socket.destroy())
+    socket.on('error', () => up.destroy())
+  })
 
   // esperar a que el relé conteste
   const relayHttp = `http://127.0.0.1:${relayPort}`

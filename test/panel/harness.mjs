@@ -29,6 +29,13 @@ function adminCSP() {
   return m[1]
 }
 
+// Las rutas de /admin que Caddy sirve (el matcher @adminpage): cualquier otra da 404, como en producción.
+function adminPaths() {
+  const m = fs.readFileSync(path.join(repoRoot, 'Caddyfile'), 'utf8').match(/@adminpage path ([^\n]+)/)
+  if (!m) throw new Error('no se encontró @adminpage en el Caddyfile')
+  return new Set(m[1].trim().split(/\s+/))
+}
+
 export async function startStack(extraEnv = {}) {
   const bin = process.env.RELAY_BIN ? path.resolve(process.env.RELAY_BIN) : path.join(repoRoot, 'nostr-relay-khatru')
   if (!fs.existsSync(bin)) throw new Error(`no existe el binario del relé (${bin}): compílalo o define RELAY_BIN`)
@@ -60,6 +67,7 @@ export async function startStack(extraEnv = {}) {
   relay.stderr.on('data', (d) => { relayLog += d })
 
   const csp = adminCSP()
+  const allowedAdmin = adminPaths()
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/admin/api/')) {
       const up = http.request({ host: '127.0.0.1', port: relayPort, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res) })
@@ -69,6 +77,7 @@ export async function startStack(extraEnv = {}) {
     }
     let f = req.url.split('?')[0]
     const isAdmin = f === '/admin' || f === '/admin/' || f.startsWith('/admin/')
+    if (isAdmin && !allowedAdmin.has(f)) { res.writeHead(404); res.end('no'); return }
     if (f === '/admin' || f === '/admin/') f = '/admin/index.html'
     const file = path.join(staticRoot, f)
     if (!file.startsWith(staticRoot) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end('no'); return }

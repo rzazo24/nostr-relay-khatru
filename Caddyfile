@@ -42,7 +42,7 @@
 	handle /admin/api/* {
 		reverse_proxy relay:3334
 	}
-	@adminpage path /admin /admin/ /admin/admin.js /admin/admin.css
+	@adminpage path /admin /admin/ /admin/admin.js /admin/admin.css /admin/nip46.js /admin/vendor/nostr.js
 	handle @adminpage {
 		root * /srv/static
 		@adminroot path /admin /admin/

@@ -54,6 +54,8 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./static:/srv/static:ro
+      - ./sites:/etc/caddy/sites:ro   # bloques de sitio extra (*.caddy)
+      - ./sites:/srv/sites:ro         # y sus archivos estáticos
       - caddy-data:/data
       - caddy-config:/config
     networks:

@@ -12,3 +12,5 @@ node_modules/
 
 # Entornos / secretos
 .env
+sites/*
+!sites/.gitkeep

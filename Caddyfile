@@ -56,3 +56,7 @@
 		reverse_proxy relay:3334
 	}
 }
+
+# Sitios adicionales (p. ej. el chat efímero): cada archivo sites/*.caddy es un bloque de sitio completo.
+# Sin archivos, no hace nada. Se recarga con `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+import /etc/caddy/sites/*.caddy

@@ -11,7 +11,7 @@ import { generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip44, byt
 const KIND = 24133
 const randomHex = (n) => bytesToHex(crypto.getRandomValues(new Uint8Array(n)))
 
-export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', onAuthUrl = () => {} } = {}) {
+export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', onAuthUrl = () => {}, onStatus = () => {} } = {}) {
   const clientSk = generateSecretKey()
   const clientPk = getPublicKey(clientSk)
   const secret = randomHex(16)
@@ -50,10 +50,12 @@ export function createSession({ name = 'Panel de control del relé', permissions
   function connect() {
     if (closed || (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))) return
     clearTimeout(timer)
-    ws = new WebSocket(relayUrl)
+    onStatus('Conectando con el relé…')
+    try { ws = new WebSocket(relayUrl) } catch (err) { onStatus(`No se pudo abrir la conexión con el relé: ${err.message}`); timer = setTimeout(connect, 3000); return }
     const mine = ws
     ws.addEventListener('open', () => {
       if (mine !== ws) return
+      onStatus('Relé conectado ✓')
       retry = 0
       subscribe()
       while (outbox.length) send(['EVENT', outbox.shift()])
@@ -61,6 +63,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
     ws.addEventListener('message', (m) => { if (mine === ws) onMessage(m.data) })
     ws.addEventListener('close', () => {
       if (mine !== ws || closed) return
+      onStatus('Conexión con el relé perdida; reintentando…')
       timer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 5000))
     })
     ws.addEventListener('error', () => {}) // el 'close' que sigue reintenta
@@ -69,6 +72,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
   function onMessage(data) {
     let msg
     try { msg = JSON.parse(data) } catch { return }
+    if (msg[0] === 'OK' && msg[2] === true) onStatus('Mensaje enviado al relé ✓')
     if (msg[0] === 'OK' && msg[2] === false) { // el relé rechazó lo que enviamos (límite de velocidad, etc.)
       for (const p of pending.values()) p.reject(new Error(`el relé rechazó el mensaje: ${msg[3] || 'sin motivo'}`))
       pending.clear()
@@ -82,10 +86,11 @@ export function createSession({ name = 'Panel de control del relé', permissions
     let body
     try {
       body = JSON.parse(nip44.decrypt(ev.content, nip44.getConversationKey(clientSk, ev.pubkey)))
-    } catch { return } // no era para nosotros o está mal cifrado
+    } catch { onStatus('Ha llegado un mensaje al panel que no se ha podido descifrar'); return } // no era para nosotros o está mal cifrado
     if (!signerPk) {
       // La primera respuesta válida es la aceptación de la conexión: debe devolver el secreto que pusimos en el enlace.
-      if (body.result === secret) { signerPk = ev.pubkey; resolveReady(signerPk) }
+      if (body.result === secret) { signerPk = ev.pubkey; onStatus('Firmador emparejado ✓'); resolveReady(signerPk) }
+      else onStatus('Ha llegado una respuesta del firmador, pero no con el secreto esperado')
       return
     }
     if (ev.pubkey !== signerPk) return // después de emparejar, solo se hace caso a ese firmador
@@ -101,6 +106,8 @@ export function createSession({ name = 'Panel de control del relé', permissions
   // Al volver a la pestaña o recuperar la red, se reconecta sin esperar.
   const wake = () => { if (!closed && (!ws || ws.readyState !== WebSocket.OPEN)) { retry = 0; connect() } }
   const onVisible = () => { if (document.visibilityState === 'visible') wake() }
+  const onViolation = (e) => onStatus(`El navegador ha bloqueado algo por la política de seguridad: ${e.violatedDirective} (${e.blockedURI || 'sin dirección'})`)
+  document.addEventListener('securitypolicyviolation', onViolation)
   document.addEventListener('visibilitychange', onVisible)
   window.addEventListener('online', wake)
   window.addEventListener('pageshow', wake)
@@ -130,6 +137,7 @@ export function createSession({ name = 'Panel de control del relé', permissions
     close() {
       closed = true
       clearTimeout(timer)
+      document.removeEventListener('securitypolicyviolation', onViolation)
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', wake)
       window.removeEventListener('pageshow', wake)

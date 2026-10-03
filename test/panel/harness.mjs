@@ -66,7 +66,7 @@ export async function startStack(extraEnv = {}) {
   relay.stdout.on('data', (d) => { relayLog += d })
   relay.stderr.on('data', (d) => { relayLog += d })
 
-  const csp = adminCSP()
+  const csp = adminCSP().replace('wss://{$RELAY_DOMAIN}', `ws://127.0.0.1:${panelPort}`) // en las pruebas el relé cuelga del host del panel
   const allowedAdmin = adminPaths()
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/admin/api/')) {

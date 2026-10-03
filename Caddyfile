@@ -48,7 +48,7 @@
 		@adminroot path /admin /admin/
 		rewrite @adminroot /admin/index.html
 		header Cache-Control "no-cache"
-		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss://{$RELAY_DOMAIN}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 		file_server
 	}
 

@@ -593,6 +593,7 @@ describe('panel de control', () => {
     assert.equal(u.searchParams.get('perms'), 'sign_event:27235')
     assert.equal(u.searchParams.get('callback'), new URL(stack.panelUrl).origin + '/admin/')
     assert.match(await page.innerText('#remote-msg'), /Esperando a que apruebes/)
+    await page.waitForFunction(() => document.getElementById('remote-diag').textContent.includes('Relé conectado'), null, { timeout: 8000 }) // el panel explica en qué punto está
 
     const signer = mockSigner(uri)
     await page.waitForSelector('#dash:not([hidden])', { timeout: 15000 })

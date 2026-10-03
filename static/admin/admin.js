@@ -78,6 +78,7 @@ function remoteReset() {
   $('remote-box').hidden = true
   $('remote-btn').hidden = false
   $('remote-link').removeAttribute('href')
+  $('remote-diag').textContent = ''
 }
 
 async function loginRemote() {
@@ -90,7 +91,10 @@ async function loginRemote() {
   let session
   try {
     const { createSession } = await import('/admin/nip46.js')
-    session = remote = createSession({ onAuthUrl: (u) => say(`El firmador pide abrir esta dirección para continuar: ${u}`) })
+    session = remote = createSession({
+      onAuthUrl: (u) => say(`El firmador pide abrir esta dirección para continuar: ${u}`),
+      onStatus: (t) => { if (remote === session || !session) $('remote-diag').textContent = `${new Date().toLocaleTimeString('es-ES')} · ${t}` },
+    })
   } catch (err) {
     remoteReset()
     $('login-msg').className = 'msg err'

@@ -130,7 +130,7 @@ dialog, and the last test fails on any console error (incl. CSP violations). Rat
 **NIP-46 login** (`static/admin/nip46.js`, lazy-loaded by `loginRemote()`; vendored crypto in `static/admin/vendor/nostr.js`, built by
 `scripts/build-admin-vendor.sh` from `tools/admin-vendor-entry.mjs`): client-initiated `nostrconnect://` flow over *this* relay (`ws(s)://<host>`, **no trailing slash** — Clave's pairing is picky) plus the relays in
 `#login[data-extra-relays]` (prod: `wss://relay.powr.build`, Clave's own relay, the only one its push proxy watches; also in the Caddyfile CSP
-`connect-src`). The panel listens/sends on all of them and dedupes. Open-in-Clave link = `clave://connect?uri=<encodeURIComponent(nostrconnect uri)>`. The login
+`connect-src`). The panel listens/sends on all of them and dedupes. Open-in-Clave link = Clave's universal link `https://clave.casa/connect/?uri=<encodeURIComponent(nostrconnect uri)>` (`clave://connect?uri=` is the fallback scheme; the first button attempt with it did not open the app, while pasting the plain `nostrconnect://` link into Clave › Connect worked end to end on a real iPhone, 2026-10-03). The login
 template carries a random `nonce` tag (a signature is single-use; two logins in the same second would otherwise be identical). First valid kind-24133 whose decrypted `result` equals the URI secret pairs the signer;
 then only `sign_event` for the NIP-98 login event is requested (no `get_public_key`: the server checks the signature belongs to the owner).
 `internal/server/mailbox.go` keeps 24133 events 10 min in memory and answers REQs that have `kinds:[24133]` + `#p`; it registers an

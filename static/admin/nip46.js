@@ -31,8 +31,9 @@ export function createSession({ name = 'Panel de control del relé', permissions
   params.set('callback', `${location.origin}/admin/`)
   params.set('perms', permissions)
   const uri = `nostrconnect://${clientPk}?${params.toString()}`
-  // Enlace que abre la app Clave directamente en iOS (esquema propio de Clave); el `uri` va codificado dentro.
-  const claveLink = `clave://connect?uri=${encodeURIComponent(uri)}`
+  // Enlace que abre la app Clave en iOS: el enlace universal de Clave (si la app está instalada, iOS la abre; si no, lleva a
+  // su página). El `uri` va codificado dentro. (Su esquema propio `clave://connect?uri=` es la alternativa, no se usa.)
+  const claveLink = `https://clave.casa/connect/?uri=${encodeURIComponent(uri)}`
 
   let closed = false
   let signerPk = null

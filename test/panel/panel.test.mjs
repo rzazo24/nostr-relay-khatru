@@ -202,6 +202,8 @@ describe('panel de control', () => {
     assert.equal(await page.evaluate(() => window.__xss ?? 'no'), 'no', 'el HTML de un evento no se ejecuta')
     assert.equal(await page.locator('#recent img, #recent script').count(), 0)
     assert.match(await page.innerText('#config'), /Retención\s+180 días/)
+    assert.equal(await page.locator('.collapsed').count(), 0, 'en el ordenador no hay nada plegado')
+    assert.equal(await page.locator('#dash section.panel > h2[role=button]').count(), 0, 'ni títulos que actúen como botón')
     assert.match(await page.innerText('#subtitle'), /Versión/)
     await ctx.close()
   })
@@ -696,6 +698,7 @@ describe('panel de control', () => {
     assert.equal(await noScroll(), true, 'la pantalla de entrada no se ensancha')
     await login(page, { fresh: true })
     await refreshUntil(page, () => document.querySelectorAll('#rejections tbody tr').length > 0 && document.querySelectorAll('#noisy tbody tr .pk').length > 0 && document.querySelectorAll('#recent li').length > 0)
+    await page.evaluate(() => document.querySelectorAll('#dash section.panel.collapsed > h2').forEach((h) => h.click())) // se miden todas, también las plegadas por defecto
     await page.click('.tabs [data-range="7d"]')
     await page.fill('#f-search [name=q]', 'nota')
     await page.click('#f-search button[type=submit]')
@@ -727,6 +730,58 @@ describe('panel de control', () => {
     assert.ok(box.width >= vp.width - 1 && box.height >= vp.height - 1, `la ayuda debe ocupar toda la ventana (${vp.width}x${vp.height}): ${JSON.stringify(box)}`)
     assert.equal(await noScroll(), true)
     await page.click('#help-close')
+    await ctx.close()
+  })
+
+  it('móvil: las secciones se pliegan tocando el título, solo «Actividad» sale abierta y se recuerda lo que abres', async () => {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-ES' })
+    const page = await ctx.newPage()
+    page.on('console', (m) => { if (m.type() === 'error' && !/status of 4\d\d/.test(m.text())) consoleErrors.push(m.text()) })
+    await page.goto(stack.panelUrl)
+    await login(page) // reutiliza la sesión (cookie) para no gastar inicios de sesión
+    const titles = await page.$$eval('#dash section.panel > h2', (h) => h.map((x) => x.childNodes[0].textContent.trim()))
+    const state = () => page.$$eval('#dash section.panel', (s) => Object.fromEntries(s.map((x) => [x.querySelector(':scope > h2').childNodes[0].textContent.trim(), x.classList.contains('collapsed')])))
+    let st = await state()
+    assert.ok(titles.length >= 9)
+    assert.equal(st['Actividad'], false, 'Actividad sale abierta')
+    assert.deepEqual(Object.keys(st).filter((k) => !st[k] && k !== 'Actividad'), [], 'las demás salen plegadas')
+    assert.equal(await page.isVisible('#chart'), true)
+    assert.equal(await page.isVisible('#noisy'), false, 'lo plegado no se ve')
+    assert.equal(await page.getAttribute('#noisy-panel > h2', 'aria-expanded'), 'false')
+    assert.equal(await page.getAttribute('#noisy-panel > h2', 'role'), 'button')
+
+    // tocar el título abre; el «?» de ayuda NO pliega
+    await page.click('#noisy-panel > h2')
+    assert.equal(await page.isVisible('#noisy'), true)
+    assert.equal(await page.getAttribute('#noisy-panel > h2', 'aria-expanded'), 'true')
+    await page.click('#noisy-panel > h2 .q')
+    assert.equal(await page.evaluate(() => document.getElementById('help').open), true, 'el ? abre la ayuda')
+    await page.click('#help-close')
+    assert.equal(await page.isVisible('#noisy'), true, 'y no ha plegado la sección')
+    // con teclado
+    await page.focus('#audit-panel > h2')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.isVisible('#audit'), true)
+    // se recuerda al recargar
+    await page.reload()
+    await page.waitForSelector('#dash:not([hidden])')
+    st = await state()
+    assert.equal(st['Claves más ruidosas'], false)
+    assert.equal(st['Historial de acciones'], false)
+    assert.equal(st['Buscar'], true)
+    // plegar de nuevo lo que ya no quieres
+    await page.click('#noisy-panel > h2')
+    assert.equal(await page.isVisible('#noisy'), false)
+    // lanzar una búsqueda desde otra sección abre «Buscar» sola
+    await page.click('#noisy-panel > h2')
+    await page.locator('#noisy tbody tr').first().locator('button:has-text("Buscar")').click()
+    await page.waitForSelector('#search-out .resultinfo')
+    assert.equal((await state())['Buscar'], false, '«Buscar» se abre cuando se lanza una búsqueda desde otro sitio')
+    assert.equal(await page.isVisible('#search-out'), true)
+    // al ensanchar la pantalla (ordenador) deja de haber nada plegado
+    await page.setViewportSize({ width: 1200, height: 800 })
+    assert.equal(await page.locator('.collapsed').count(), 0)
+    assert.equal(await page.isVisible('#noisy'), true)
     await ctx.close()
   })
 

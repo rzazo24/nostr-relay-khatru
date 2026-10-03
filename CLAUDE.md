@@ -132,6 +132,9 @@ dialog, and the last test fails on any console error (incl. CSP violations). Rat
 (set by `labelTable()` in `admin.js`, which also writes each cell's `data-label` from its `<th>`; the CSS prints it with `td::before`, so `innerText` doesn't
 see the labels — test `getComputedStyle(td,'::before').content`); `<dialog>` is full-screen; `viewport-fit=cover` + `env(safe-area-inset-*)`. The Playwright
 `iPhone 13` profile's usable viewport is 390×664 (no Safari chrome).
+Folding: on narrow screens each `#dash section.panel > h2` is a `role=button` (`foldApply()`/`foldToggle()` in `admin.js`, keyed by the h2's first text node,
+state in `localStorage['panel-plegado']`); folded = `.collapsed` → CSS hides every child but the h2. Anything that must reveal a section calls `foldOpen()`
+(`searchFor()` does it for «Buscar»). A test that clicks inside a panel on a phone profile must open it first.
 
 **NIP-46 login** (`static/admin/nip46.js`, lazy-loaded by `loginRemote()`; vendored crypto in `static/admin/vendor/nostr.js`, built by
 `scripts/build-admin-vendor.sh` from `tools/admin-vendor-entry.mjs`): client-initiated `nostrconnect://` flow over *this* relay (`ws(s)://<host>`, **no trailing slash** — Clave's pairing is picky) plus the relays in

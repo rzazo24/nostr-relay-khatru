@@ -185,3 +185,13 @@ main { padding-left:max(20px, env(safe-area-inset-left)); padding-right:max(20px
   .toast { top:max(8px, env(safe-area-inset-top)); }
 }
 @media (max-width:700px) { .cards-help .sep { display:none; } }
+
+/* Secciones plegables en el móvil: el título es el botón; plegada, solo se ve el título */
+@media (max-width:700px) {
+  #dash section.panel > h2[role=button] { cursor:pointer; display:flex; align-items:center; gap:6px; min-height:44px; margin-bottom:0; -webkit-tap-highlight-color:transparent; user-select:none; }
+  #dash section.panel > h2[role=button]::after { content:"\25BE"; margin-left:auto; padding-left:8px; color:var(--muted); transition:transform .15s; }
+  #dash section.panel.collapsed > h2[role=button]::after { transform:rotate(-90deg); }
+  #dash section.panel > h2[role=button]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
+  #dash section.panel.collapsed > :not(h2) { display:none; }
+  #dash section.panel:not(.collapsed) > h2[role=button] { margin-bottom:8px; }
+}

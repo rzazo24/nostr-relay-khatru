@@ -568,6 +568,7 @@ function searchButton(text) {
 
 // Una búsqueda nueva desde un botón (una clave, un tipo…) parte sin fechas.
 async function searchFor(q, kind) {
+  foldOpen($('search-panel'))
   const f = $('f-search').elements
   f.q.value = q
   f.kind.value = kind
@@ -680,6 +681,52 @@ document.querySelectorAll('#f-search .presets [data-days]').forEach((b) => b.add
   f.to.value = isoDay(today)
 }))
 $('search-clear').addEventListener('click', () => { $('f-search').reset(); $('search-out').replaceChildren(); searchState = null })
+
+// ---------- secciones plegables (solo en pantallas estrechas) ----------
+
+// En el móvil cada sección se pliega tocando su título (la de «Actividad» sale abierta, las demás cerradas) y se recuerda lo que
+// abres. En el ordenador no hay nada plegable. Se guarda en este navegador (localStorage), sin que importe si no está disponible.
+const narrow = window.matchMedia('(max-width: 700px)')
+const FOLD_KEY = 'panel-plegado'
+const foldState = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') } catch { return {} } }
+const foldSave = (st) => { try { localStorage.setItem(FOLD_KEY, JSON.stringify(st)) } catch { /* sin almacenamiento: no se recuerda */ } }
+const foldTitle = (sec) => sec.querySelector(':scope > h2').childNodes[0].textContent.trim()
+const foldPanels = () => [...document.querySelectorAll('#dash section.panel')].filter((s) => s.querySelector(':scope > h2'))
+
+function foldSet(sec, collapsed, remember) {
+  sec.classList.toggle('collapsed', collapsed)
+  sec.querySelector(':scope > h2').setAttribute('aria-expanded', String(!collapsed))
+  if (remember) { const st = foldState(); st[foldTitle(sec)] = collapsed; foldSave(st) }
+}
+
+function foldApply() {
+  const st = foldState()
+  for (const sec of foldPanels()) {
+    const h = sec.querySelector(':scope > h2')
+    if (!narrow.matches) { sec.classList.remove('collapsed'); h.removeAttribute('role'); h.removeAttribute('tabindex'); h.removeAttribute('aria-expanded'); continue }
+    h.setAttribute('role', 'button')
+    h.setAttribute('tabindex', '0')
+    const t = foldTitle(sec)
+    foldSet(sec, t in st ? st[t] : t !== 'Actividad', false)
+  }
+}
+
+function foldToggle(ev) {
+  const h = ev.target.closest('#dash section.panel > h2')
+  if (!h || !narrow.matches || ev.target.closest('button')) return // el «?» de ayuda no pliega
+  if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return
+  ev.preventDefault()
+  const sec = h.parentElement
+  foldSet(sec, !sec.classList.contains('collapsed'), true)
+}
+
+/** Abre una sección (por ejemplo la de búsqueda cuando se lanza una desde otro sitio). */
+function foldOpen(sec) { if (sec.classList.contains('collapsed')) foldSet(sec, false, true) }
+
+document.addEventListener('click', foldToggle)
+document.addEventListener('keydown', foldToggle)
+narrow.addEventListener('change', foldApply)
+foldApply()
 
 // ---------- ayuda ----------
 

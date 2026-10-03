@@ -127,6 +127,12 @@ enforced), `panel.test.mjs` drives Chromium with a simulated nos2x. Gotchas: sta
 second would otherwise collide); the help-coverage test fails if a new card/config/moderation label is not explained in the help
 dialog, and the last test fails on any console error (incl. CSP violations). Rate limits are set sky-high via env.
 
+**Phone layout** (end of `static/admin/admin.css`, `@media (max-width:700px), (pointer:coarse)` + `(max-width:700px)`): grids need `min-width:0`
+(a table inside a grid item made the page 535 px wide on a 390 px phone); inputs must be ≥16 px or iOS zooms on focus; tap targets ≥40–44 px; tables get class `stack`
+(set by `labelTable()` in `admin.js`, which also writes each cell's `data-label` from its `<th>`; the CSS prints it with `td::before`, so `innerText` doesn't
+see the labels — test `getComputedStyle(td,'::before').content`); `<dialog>` is full-screen; `viewport-fit=cover` + `env(safe-area-inset-*)`. The Playwright
+`iPhone 13` profile's usable viewport is 390×664 (no Safari chrome).
+
 **NIP-46 login** (`static/admin/nip46.js`, lazy-loaded by `loginRemote()`; vendored crypto in `static/admin/vendor/nostr.js`, built by
 `scripts/build-admin-vendor.sh` from `tools/admin-vendor-entry.mjs`): client-initiated `nostrconnect://` flow over *this* relay (`ws(s)://<host>`, **no trailing slash** — Clave's pairing is picky) plus the relays in
 `#login[data-extra-relays]` (prod: `wss://relay.powr.build`, Clave's own relay, the only one its push proxy watches; also in the Caddyfile CSP

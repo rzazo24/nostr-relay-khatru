@@ -175,6 +175,14 @@ function stop() { if (timer) { clearInterval(timer); timer = null } }
 
 // ---------- pintado ----------
 
+// En pantallas estrechas las tablas se muestran como tarjetas («Etiqueta: valor»); cada celda toma su etiqueta de la cabecera.
+function labelTable(id) {
+  const t = $(id)
+  t.classList.add('stack')
+  const heads = [...t.querySelectorAll('thead th')].map((h) => h.textContent.trim())
+  t.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => { if (heads[i] && !td.hasAttribute('colspan')) td.dataset.label = heads[i] }))
+}
+
 function render(d) {
   const now = d.now
   $('subtitle').textContent = `Versión ${d.version} · en marcha desde hace ${duration(now - d.startedAt)}`
@@ -216,8 +224,10 @@ function render(d) {
     el('td', { text: clock(r.t) }), el('td', { text: r.what === 'event' ? 'evento' : 'consulta' }),
     el('td', { text: r.kind >= 0 ? String(r.kind) : '—' }), el('td', {}, r.pubkey ? searchButton(r.pubkey) : '—'), el('td', { class: 'reason', text: r.reason }))))
 
+  labelTable('rejections')
   const noisyBody = $('noisy').querySelector('tbody')
   noisyBody.replaceChildren(...d.activity.noisy.map((n) => noisyRow(n, now)))
+  labelTable('noisy')
   if (!d.activity.noisy.length) noisyBody.append(el('tr', {}, el('td', { colspan: '6', class: 'muted', text: 'Ningún evento rechazado en las últimas 24 h.' })))
 
   $('recent').replaceChildren(...d.events.recent.map((e) => eventItem(e, now, { source: 'eventos recientes' })))
@@ -462,6 +472,7 @@ function renderHistory(items) {
       el('td', { class: 'reason', text: a.detail || '' }), el('td', { text: a.source === 'nip86' ? 'NIP-86' : 'panel' }))
   }))
   if (!items.length) body.append(el('tr', {}, el('td', { colspan: '5', class: 'muted', text: 'Todavía no hay acciones anotadas.' })))
+  labelTable('audit')
 }
 
 const INFO_FIELDS = ['name', 'description', 'icon', 'contact', 'tags', 'languages', 'postingPolicy']

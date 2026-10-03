@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import zlib from 'node:zlib'
 import { execFileSync } from 'node:child_process'
 import { after, before, describe, it } from 'node:test'
-import { chromium } from 'playwright'
+import { chromium, devices } from 'playwright'
 import WebSocket from 'ws'
 import { Relay, useWebSocketImplementation } from 'nostr-tools/relay'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
@@ -678,6 +678,55 @@ describe('panel de control', () => {
     await page.click('#remote-btn')
     await page.waitForSelector('#remote-link[href^="https://clave.casa/connect/?uri="]')
     assert.notEqual(await page.getAttribute('#remote-link', 'data-uri'), first, 'cada intento usa claves y secreto nuevos')
+    await ctx.close()
+  })
+
+  it('móvil (iPhone): sin desplazamiento horizontal, controles táctiles, letra de 16 px en los campos y tablas apiladas', async () => {
+    const lead = newKey()
+    for (let i = 0; i < 3; i++) await pub(lead.sk, 1, 'y'.repeat(900)) // rechazos: dan filas en las tablas
+    await pub(lead.sk, 1, 'nota para el móvil, con un texto largo largo largo largo largo largo largo largo largo largo largo largo')
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-ES' })
+    await ctx.exposeFunction('__sign', (ev) => finalizeEvent(ev, stack.ownerSecret))
+    await ctx.addInitScript(() => { window.nostr = { signEvent: (ev) => window.__sign(ev) } })
+    const page = await ctx.newPage()
+    page.on('dialog', (d) => d.accept())
+    page.on('console', (m) => { if (m.type() === 'error' && !/status of 4\d\d/.test(m.text())) consoleErrors.push(m.text()) })
+    await page.goto(stack.panelUrl)
+    const noScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+    assert.equal(await noScroll(), true, 'la pantalla de entrada no se ensancha')
+    await login(page, { fresh: true })
+    await refreshUntil(page, () => document.querySelectorAll('#rejections tbody tr').length > 0 && document.querySelectorAll('#noisy tbody tr .pk').length > 0 && document.querySelectorAll('#recent li').length > 0)
+    await page.click('.tabs [data-range="7d"]')
+    await page.fill('#f-search [name=q]', 'nota')
+    await page.click('#f-search button[type=submit]')
+    await page.waitForSelector('#search-out .resultinfo')
+    await sleep(300)
+    assert.equal(await noScroll(), true, 'el panel completo cabe en el ancho del móvil (sin desplazamiento horizontal)')
+
+    const small = await page.evaluate(() => [...document.querySelectorAll('button, summary, a.btnlike, input:not([type=checkbox]), select, textarea')]
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 32 && !e.closest('dialog:not([open])') })
+      .map((e) => `${e.tagName.toLowerCase()}#${e.id || e.name || ''} «${(e.textContent || '').trim().slice(0, 16)}» ${Math.round(e.getBoundingClientRect().height)}px`))
+    assert.deepEqual(small, [], `controles demasiado pequeños para el dedo: ${small.join(', ')}`)
+    const fonts = await page.evaluate(() => [...document.querySelectorAll('input, select, textarea')].filter((e) => e.getBoundingClientRect().width > 0 && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.name || e.id))
+    assert.deepEqual(fonts, [], `campos con letra menor de 16 px (iOS amplía la pantalla al tocarlos): ${fonts.join(', ')}`)
+
+    // las tablas pasan a tarjetas «Etiqueta: valor»
+    const display = await page.evaluate(() => ({ thead: getComputedStyle(document.querySelector('#rejections thead')).display, td: getComputedStyle(document.querySelector('#rejections td')).display }))
+    assert.deepEqual(display, { thead: 'none', td: 'block' })
+    const labels = await page.evaluate(() => ({
+      noisy: [...document.querySelectorAll('#noisy tbody tr:first-child td[data-label]')].map((td) => getComputedStyle(td, '::before').content),
+      rejections: [...document.querySelectorAll('#rejections tbody tr:first-child td[data-label]')].map((td) => getComputedStyle(td, '::before').content),
+    }))
+    assert.ok(labels.noisy.includes('"Rechazos: "') && labels.noisy.includes('"Último: "'), `etiquetas de «Claves más ruidosas»: ${labels.noisy}`)
+    assert.ok(labels.rejections.includes('"Motivo: "') && labels.rejections.includes('"Hora: "'), `etiquetas de «Rechazos»: ${labels.rejections}`)
+
+    // la ayuda ocupa la pantalla entera
+    await page.click('#help-btn')
+    const box = await page.locator('#help').boundingBox()
+    const vp = page.viewportSize()
+    assert.ok(box.width >= vp.width - 1 && box.height >= vp.height - 1, `la ayuda debe ocupar toda la ventana (${vp.width}x${vp.height}): ${JSON.stringify(box)}`)
+    assert.equal(await noScroll(), true)
+    await page.click('#help-close')
     await ctx.close()
   })
 

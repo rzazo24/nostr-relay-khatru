@@ -117,3 +117,71 @@ td .pk { cursor:pointer; }
 .remote ol { padding-left:20px; margin:8px 0; } .btnlike { display:inline-block; padding:8px 14px; border-radius:8px; border:1px solid var(--border); text-decoration:none; color:inherit; background:var(--panel); }
 .btnlike.primary { background:var(--accent); border-color:var(--accent); color:#04201b; font-weight:700; }
 #login .btns { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+
+/* ---------- Móvil (iPhone): sin ensanchar la página, controles para el dedo, tablas apiladas y ayuda a pantalla completa ---------- */
+html { -webkit-text-size-adjust:100%; }
+button, .btnlike, summary, a { touch-action:manipulation; }
+.cols > *, .panel, .box, main { min-width:0; }
+.cols { grid-template-columns:minmax(0,1fr); }
+@media (min-width:900px) { .cols { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+main { padding-left:max(20px, env(safe-area-inset-left)); padding-right:max(20px, env(safe-area-inset-right)); padding-bottom:max(56px, env(safe-area-inset-bottom)); }
+
+/* Dedos: objetivos de al menos 44 px y letra de 16 px en los campos (si no, iOS amplía la pantalla al tocarlos) */
+@media (max-width:700px), (pointer:coarse) {
+  input, select, textarea { font-size:16px; min-height:44px; }
+  textarea { min-height:88px; }
+  button, .btnlike { min-height:44px; }
+  .q { width:40px; height:40px; margin-left:2px; font-size:1rem; }
+  .tabs button { min-height:40px; padding:3px 14px; }
+  .linkish { min-height:44px; padding:0 4px; display:inline-flex; align-items:center; }
+  button.chipbtn, .items button, .recent .act, #noisy .act { min-height:40px; padding:2px 12px; }
+  button.pk { min-height:40px; padding:0 4px; display:inline-flex; align-items:center; }
+  .check input, input[type=checkbox] { width:22px; height:22px; min-height:22px; }
+  summary { min-height:44px; display:flex; align-items:center; }
+  .toc a { padding:8px 12px; }
+}
+
+@media (max-width:700px) {
+  main { padding-top:max(14px, env(safe-area-inset-top)); padding-left:max(14px, env(safe-area-inset-left)); padding-right:max(14px, env(safe-area-inset-right)); }
+  h1 { font-size:1.3rem; }
+  .top { gap:8px; margin-bottom:14px; }
+  .actions { width:100%; } .actions #updated { flex:1 1 100%; order:3; }
+  .actions button { flex:1 1 auto; }
+  .panel { padding:12px; border-radius:10px; }
+  .cards { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .card { padding:10px 12px; } .card .v { font-size:1.25rem; overflow-wrap:anywhere; }
+  .row { grid-template-columns:minmax(80px,1fr) 2fr auto; gap:8px; }
+  .modgrid { gap:12px; }
+  .form.inline { flex-direction:column; align-items:stretch; } .form.inline input, .form.inline select { width:100%; }
+  .btns { flex-direction:column; align-items:stretch; } .btns button { width:100%; }
+  .searchform .kindin { width:100%; flex:1 1 100%; } .searchform input:first-child { flex:1 1 100%; }
+  .daterow { flex-direction:column; align-items:stretch; gap:8px; } .daterow label { justify-content:space-between; } .daterow input[type=date] { width:60%; }
+  .presets { flex-wrap:wrap; } .presets button { flex:1 1 30%; }
+  .recent .meta { gap:8px; } .recent .actions2 { margin-left:0; width:100%; } .recent .actions2 button { flex:1; }
+  .keycard .top { flex-direction:column; align-items:stretch; } .keycard .actions2 { display:flex; flex-wrap:wrap; gap:6px; }
+  .remote .btns { flex-direction:column; }
+  #login .btns { flex-direction:column; align-items:stretch; } .btnlike { text-align:center; }
+  .kv { grid-template-columns:1fr; gap:0; } .kv dd { text-align:left; margin-bottom:6px; }
+
+  /* Tablas de varias columnas: cada fila pasa a ser una tarjeta con «Etiqueta: valor» (las etiquetas las pone el JS en data-label) */
+  .scroll { max-height:none; overflow-x:visible; overflow-y:visible; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display:block; width:100%; }
+  table.stack thead { display:none; }
+  table.stack tr { padding:10px 0; border-bottom:1px solid var(--border); }
+  table.stack td { white-space:normal; border:none; padding:2px 0; min-width:0; overflow-wrap:anywhere; text-align:left; }
+  table.stack td[data-label]::before { content:attr(data-label) ": "; color:var(--muted); }
+  table.stack td.reason { min-width:0; }
+  #noisy td:last-child, #noisy.stack td:last-child { text-align:left; padding-top:6px; } #noisy .act { margin:0 6px 0 0; }
+  table.stack td[colspan] { padding:6px 0; }
+
+  /* Ayuda a pantalla completa, respetando el notch y la barra de abajo */
+  dialog { width:100vw; max-width:100vw; height:100dvh; max-height:100dvh; margin:0; border-radius:0; border:none; }
+  .help-head { padding:max(12px, env(safe-area-inset-top)) 14px 12px; }
+  .toc { flex-wrap:nowrap; overflow-x:auto; padding:8px 0; -webkit-overflow-scrolling:touch; } .toc a { white-space:nowrap; flex:0 0 auto; }
+  .searchform .btns { width:100%; }
+  table.stack td .pk { min-height:32px; }
+  .cards-help { display:flex; flex-direction:column; align-items:flex-start; gap:0; }
+  .help-body { padding:6px 14px max(24px, env(safe-area-inset-bottom)); }
+  .toast { top:max(8px, env(safe-area-inset-top)); }
+}
+@media (max-width:700px) { .cards-help .sep { display:none; } }

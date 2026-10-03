@@ -136,6 +136,10 @@ fails listing what is untranslated; `I18N.missing` entries look like `html:5c679
 Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the translator). Section-fold state is keyed by the Spanish h2 text kept in `data-fold-key`
 (set before the first translation). The stored reasons for bans made from the panel are written in the UI language at the time.
 
+**Hover is mouse-only**: every `:hover` rule that changes colours/borders (panel `admin.css`, `landing.css`) lives inside `@media (hover:hover)`; on touch
+screens hover sticks after a tap, so a tapped button ("Actualizar") stayed green. The mobile panel test taps `#refresh` and asserts its border is unchanged.
+Keep new hover styles inside that media query.
+
 **Phone layout** (end of `static/admin/admin.css`, `@media (max-width:700px), (pointer:coarse)` + `(max-width:700px)`): grids need `min-width:0`
 (a table inside a grid item made the page 535 px wide on a 390 px phone); inputs must be ≥16 px or iOS zooms on focus; tap targets ≥40–44 px; tables get class `stack`
 (set by `labelTable()` in `admin.js`, which also writes each cell's `data-label` from its `<th>`; the CSS prints it with `td::before`, so `innerText` doesn't

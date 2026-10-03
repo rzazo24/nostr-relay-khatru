@@ -723,6 +723,14 @@ describe('panel de control', () => {
     assert.ok(labels.noisy.includes('"Rechazos: "') && labels.noisy.includes('"Último: "'), `etiquetas de «Claves más ruidosas»: ${labels.noisy}`)
     assert.ok(labels.rejections.includes('"Motivo: "') && labels.rejections.includes('"Hora: "'), `etiquetas de «Rechazos»: ${labels.rejections}`)
 
+    // tras tocar un botón no se queda el borde verde del «hover» (en pantallas táctiles el hover se queda pegado)
+    const borderOf = (sel) => page.evaluate((q) => getComputedStyle(document.querySelector(q)).borderTopColor, sel)
+    const before = await borderOf('#refresh')
+    await page.tap('#refresh')
+    await sleep(300)
+    assert.equal(await borderOf('#refresh'), before, `«Actualizar» conserva su borde normal tras tocarlo (antes ${before})`)
+    assert.notEqual(await borderOf('#refresh'), 'rgb(45, 212, 191)', 'el borde no se queda verde')
+
     // la ayuda ocupa la pantalla entera
     await page.click('#help-btn')
     const box = await page.locator('#help').boundingBox()

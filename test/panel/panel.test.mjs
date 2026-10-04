@@ -261,23 +261,27 @@ describe('panel de control', () => {
     const base = await look('#refresh')
     assert.notEqual(base.border, ACCENT)
 
-    // pulsar «Actualizar»: se ilumina un instante...
-    await page.click('#refresh')
-    await page.mouse.move(2, 2) // sin el ratón encima: lo que se ve es solo el destello
-    await sleep(500) // la transición del borde dura 0,35 s
-    assert.equal(await page.evaluate(() => document.getElementById('refresh').classList.contains('flash')), true, 'el botón recién pulsado tiene el destello')
-    assert.equal((await look('#refresh')).border, ACCENT, 'y se ve iluminado')
-    // ...y no se queda fijo
-    await sleep(1300)
-    assert.equal(await page.evaluate(() => document.getElementById('refresh').classList.contains('flash')), false, 'a los ~1,2 s el destello se quita solo')
-    const after = await look('#refresh')
-    assert.equal(after.border, base.border, 'el borde vuelve al normal')
-    assert.equal(after.shadow, base.shadow, 'y el brillo también')
+    // pulsar «Actualizar»: se ilumina un instante... (sin transición, para medir el estado exacto y sin depender de pausas)
+    await page.evaluate(() => { const sh = new CSSStyleSheet(); sh.replaceSync('button{transition:none!important}'); document.adoptedStyleSheets = [...document.adoptedStyleSheets, sh] })
+    const lit = await page.evaluate(() => new Promise((resolve) => {
+      const b = document.getElementById('refresh')
+      const t0 = performance.now()
+      b.click()
+      const during = { flash: b.classList.contains('flash'), border: getComputedStyle(b).borderTopColor }
+      const tick = () => (b.classList.contains('flash') ? requestAnimationFrame(tick) : resolve({ during, ms: Math.round(performance.now() - t0), after: getComputedStyle(b).borderTopColor, shadow: getComputedStyle(b).boxShadow }))
+      tick()
+    }))
+    assert.equal(lit.during.flash, true, 'el botón recién pulsado tiene el destello')
+    assert.equal(lit.during.border, ACCENT, 'y se ve iluminado')
+    // ...y no se queda fijo: dura ~1 s y se apaga solo
+    assert.ok(lit.ms >= 900 && lit.ms < 4000, `el destello dura ~1 s (fueron ${lit.ms} ms)`)
+    assert.equal(lit.after, base.border, 'el borde vuelve al normal')
+    assert.equal(lit.shadow, base.shadow, 'y el brillo también')
 
     // lo mismo con otros botones (pestañas, ayuda): se iluminan y se apagan
     await page.click('.tabs [data-range="7d"]')
     await page.mouse.move(2, 2)
-    await sleep(1700)
+    await page.waitForFunction(() => document.querySelectorAll('button.flash').length === 0, null, { timeout: 5000 })
     assert.equal(await page.evaluate(() => document.querySelectorAll('button.flash').length), 0, 'ningún botón se queda con el destello')
     await ctx.close()
   })
@@ -766,9 +770,11 @@ describe('panel de control', () => {
 
     // tras tocar un botón no se queda el borde verde del «hover» (en pantallas táctiles el hover se queda pegado)
     const borderOf = (sel) => page.evaluate((q) => getComputedStyle(document.querySelector(q)).borderTopColor, sel)
+    await page.waitForFunction(() => !document.querySelector('#refresh').classList.contains('flash'), null, { timeout: 5000 }) // antes se pulsó «Actualizar»: que acabe su destello
+    await sleep(500) // y su desvanecido
     const before = await borderOf('#refresh')
     await page.tap('#refresh')
-    await sleep(1500) // el destello de ~1 s ya se ha apagado: no queda nada fijo
+    await page.waitForFunction((c) => getComputedStyle(document.getElementById('refresh')).borderTopColor === c, before, { timeout: 5000 }) // el destello de ~1 s se apaga solo: no queda nada fijo
     assert.equal(await borderOf('#refresh'), before, `«Actualizar» recupera su borde normal tras el destello (antes ${before})`)
     assert.notEqual(await borderOf('#refresh'), 'rgb(45, 212, 191)', 'el borde no se queda verde')
 
@@ -829,6 +835,7 @@ describe('panel de control', () => {
     assert.equal(await page.isVisible('#search-out'), true)
     // al ensanchar la pantalla (ordenador) deja de haber nada plegado
     await page.setViewportSize({ width: 1200, height: 800 })
+    await page.waitForFunction(() => document.querySelectorAll('.collapsed').length === 0, null, { timeout: 5000 }) // el aviso del cambio de tamaño llega de forma asíncrona
     assert.equal(await page.locator('.collapsed').count(), 0)
     assert.equal(await page.isVisible('#noisy'), true)
     await ctx.close()

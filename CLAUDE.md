@@ -139,6 +139,11 @@ Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the transla
 **Hover is mouse-only**: every `:hover` rule that changes colours/borders (panel `admin.css`, `landing.css`) lives inside `@media (hover:hover)`; on touch
 screens hover sticks after a tap, so a tapped button ("Actualizar") stayed green. The mobile panel test taps `#refresh` and asserts its border is unchanged.
 Keep new hover styles inside that media query.
+**Public stats**: `GET /stats.json` (`internal/admin/publicstats.go`, mounted by `Panel.Mount`, cached 30 s) feeds the landing page's *Activity* section (`landing.js`
+`renderStats`, `#activity`, hidden if the fetch fails). It is deliberately unauthenticated, so it may only carry aggregates: no pubkeys, IPs, content, rejection reasons
+or private kinds (the Go test `TestPublicStats` greps the raw body for all of those). The panel opens its read-only DB connection even without `RELAY_PUBKEY` because this
+endpoint needs it. Caddy needs no change (the catch-all reverse proxy serves it); the landing CSP already allows `connect-src 'self'`. Panel test: «página de inicio: cifras públicas…».
+
 **Event types are colour-coded**: `kindFamily(k)` in `admin.js` maps a kind to a family (note, react, profile, private, ephemeral, app, auth, delete, zap, other);
 `kindBadge(k)` draws the pill (number + name, so colour is never the only cue) and event cards (`#recent`, search results) get `data-fam` for the coloured left
 border. Colours are the `[data-fam=…]{--kc}` rules in `admin.css`; the same badge is used in the Rejections and Noisy keys tables. Help text for it lives in `h-recent`

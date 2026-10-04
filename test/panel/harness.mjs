@@ -29,6 +29,14 @@ function adminCSP() {
   return m[1]
 }
 
+// La política de contenido de la página de inicio ("/"), leída del Caddyfile.
+function landingCSP() {
+  const caddyfile = fs.readFileSync(path.join(repoRoot, 'Caddyfile'), 'utf8')
+  const m = caddyfile.match(/handle @page \{[\s\S]*?Content-Security-Policy "([^"]+)"/)
+  if (!m) throw new Error('no se encontró la política de contenido de la página de inicio en el Caddyfile')
+  return m[1]
+}
+
 // Las rutas de /admin que Caddy sirve (el matcher @adminpage): cualquier otra da 404, como en producción.
 function adminPaths() {
   const m = fs.readFileSync(path.join(repoRoot, 'Caddyfile'), 'utf8').match(/@adminpage path ([^\n]+)/)
@@ -68,7 +76,21 @@ export async function startStack(extraEnv = {}) {
 
   const csp = adminCSP().replace('wss://{$RELAY_DOMAIN}', `ws://127.0.0.1:${panelPort}`).replace('wss://relay.powr.build', `ws://127.0.0.1:${panelPort}`) // en las pruebas el relé cuelga del host del panel
   const allowedAdmin = adminPaths()
+  const landing = landingCSP()
+  const toRelay = (req, res) => {
+    const up = http.request({ host: '127.0.0.1', port: relayPort, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res) })
+    up.on('error', () => { res.writeHead(502); res.end() })
+    req.pipe(up)
+  }
   const server = http.createServer((req, res) => {
+    // Como Caddy: la ficha NIP-11 y /stats.json son del relé; la raíz con navegador es la página de inicio (con su política de contenido)
+    const pathOnly = req.url.split('?')[0]
+    if (pathOnly === '/stats.json' || (pathOnly === '/' && /nostr\+json/.test(req.headers.accept || ''))) { toRelay(req, res); return }
+    if (pathOnly === '/') {
+      res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-cache', 'Content-Security-Policy': landing })
+      fs.createReadStream(path.join(staticRoot, 'index.html')).pipe(res)
+      return
+    }
     if (req.url.startsWith('/admin/api/')) {
       const up = http.request({ host: '127.0.0.1', port: relayPort, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res) })
       up.on('error', () => { res.writeHead(502); res.end() })
@@ -117,7 +139,7 @@ export async function startStack(extraEnv = {}) {
 
   return {
     ownerSecret, ownerPk, dbPath, backupFile,
-    relayWs: `ws://127.0.0.1:${relayPort}`, relayHttp, panelUrl: `http://127.0.0.1:${panelPort}/admin/`,
+    relayWs: `ws://127.0.0.1:${relayPort}`, relayHttp, panelUrl: `http://127.0.0.1:${panelPort}/admin/`, homeUrl: `http://127.0.0.1:${panelPort}/`,
     log: () => relayLog,
     async stop() {
       server.close()

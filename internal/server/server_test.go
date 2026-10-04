@@ -1687,3 +1687,108 @@ func TestMailbox_ExpiresAndIsBounded(t *testing.T) {
 		t.Fatalf("a los %v desaparece todo, quedan %d", mailboxTTL, n)
 	}
 }
+
+// ---------- estadísticas públicas (/stats.json) ----------
+
+func publicGet(t *testing.T, ts *httptest.Server, path string) (*http.Response, string) {
+	t.Helper()
+	res, err := http.Get(ts.URL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res, string(b)
+}
+
+func TestPublicStats(t *testing.T) {
+	owner, someone := newKeys(), newKeys()
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_MAX_CONTENT_LENGTH": "50"})
+	r := connect(t, ts)
+	publish(r, owner.event(1, "nota secreta del dueño", nil))
+	publish(r, someone.event(1, "nota de un desconocido", nil))
+	publish(r, someone.event(7, "+", nostr.Tags{{"e", strings.Repeat("a", 64)}}))
+	publish(r, someone.event(4, "contenido privado", nostr.Tags{{"p", owner.pk}}))
+	publish(r, someone.event(1, strings.Repeat("x", 80), nil)) // rechazada por tamaño
+	time.Sleep(150 * time.Millisecond)
+
+	// sin sesión ni firma
+	res, raw := publicGet(t, ts, "/stats.json")
+	if res.StatusCode != 200 {
+		t.Fatalf("las estadísticas públicas no piden sesión: %d %s", res.StatusCode, raw)
+	}
+	if got := res.Header.Get("Cache-Control"); got != "public, max-age=30" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	if res.Header.Get("Access-Control-Allow-Origin") != "*" || !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("cabeceras: %v", res.Header)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatal(err)
+	}
+
+	// solo cifras agregadas: nada de claves, IPs, contenido, motivos de rechazo ni tipos privados
+	for _, secret := range []string{owner.pk, someone.pk, someone.pk[:8], "nota secreta", "desconocido", "contenido privado", "127.0.0.1", "recent", "rejections", "noisy", "reason", "ip"} {
+		if strings.Contains(strings.ToLower(raw), strings.ToLower(secret)) {
+			t.Fatalf("/stats.json no debe contener %q: %s", secret, raw)
+		}
+	}
+	events := body["events"].(map[string]any)
+	if events["total"].(float64) != 4 || events["authors"].(float64) != 2 {
+		t.Fatalf("recuento: %v", events)
+	}
+	kinds := map[float64]float64{}
+	for _, k := range events["byKind"].([]any) {
+		kk := k.(map[string]any)
+		kinds[kk["kind"].(float64)] = kk["count"].(float64)
+	}
+	if kinds[1] != 2 || kinds[7] != 1 {
+		t.Fatalf("por tipo: %v", kinds)
+	}
+	if _, has := kinds[4]; has {
+		t.Fatal("los mensajes privados no aparecen en el desglose por tipo")
+	}
+	if body["connections"].(float64) < 1 || body["startedAt"].(float64) <= 0 || body["now"].(float64) <= 0 {
+		t.Fatalf("conexiones/arranque: %v", body)
+	}
+	day := body["last24h"].(map[string]any)
+	hours := day["hours"].([]any)
+	if len(hours) != 24 {
+		t.Fatalf("24 horas: %d", len(hours))
+	}
+	prev := float64(0)
+	for _, h := range hours {
+		hh := h.(map[string]any)
+		if hh["t"].(float64) <= prev {
+			t.Fatal("las horas van en orden")
+		}
+		prev = hh["t"].(float64)
+		for _, k := range []string{"saved", "ephemeral"} {
+			if _, ok := hh[k]; !ok {
+				t.Fatalf("falta %q en %v", k, hh)
+			}
+		}
+	}
+	for _, k := range []string{"saved", "ephemeral", "rejected"} {
+		if _, ok := day[k]; !ok {
+			t.Fatalf("falta el total %q: %v", k, day)
+		}
+	}
+
+	// un POST no vale y una ruta cercana no existe
+	if resp, err := http.Post(ts.URL+"/stats.json", "application/json", nil); err == nil {
+		resp.Body.Close()
+		if resp.StatusCode == 200 {
+			t.Fatal("solo GET")
+		}
+	}
+}
+
+func TestPublicStats_WorkWithoutAnOwner(t *testing.T) {
+	_, ts := start(t, nil) // sin RELAY_PUBKEY el panel está desactivado, pero la página de inicio sigue pudiendo enseñar cifras
+	res, raw := publicGet(t, ts, "/stats.json")
+	if res.StatusCode != 200 || !strings.Contains(raw, `"events"`) {
+		t.Fatalf("%d %s", res.StatusCode, raw)
+	}
+}

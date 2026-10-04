@@ -242,6 +242,71 @@ describe('panel de control', () => {
     await ctx.close()
   })
 
+  it('página de inicio: cifras públicas (eventos, autores, conectados, 24 h, gráfica, tipos), en inglés y español, sin datos privados y sin romper la página si fallan', async () => {
+    const a = newKey(), b = newKey()
+    await pub(a.sk, 1, 'nota pública de la portada')
+    await pub(b.sk, 7, '+', [['e', 'a'.repeat(64)], ['p', a.pk]])
+    await pub(b.sk, 4, 'mensaje privado de la portada', [['p', a.pk]])
+    const doc = await (await fetch(stack.homeUrl + 'stats.json')).json()
+    assert.ok(doc.events.total >= 3 && doc.events.authors >= 2, JSON.stringify(doc.events))
+
+    const open = async (opts = {}, collect = true) => {
+      const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 }, locale: 'en-GB', ...opts })
+      const page = await ctx.newPage()
+      if (collect) {
+        page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`))
+        page.on('console', (m) => { if (m.type() === 'error' && !/status of 4\d\d/.test(m.text())) consoleErrors.push(m.text()) })
+      }
+      return { ctx, page }
+    }
+    const { ctx, page } = await open()
+    await page.goto(stack.homeUrl)
+    await page.waitForSelector('#activity:not([hidden])')
+    const num = (n) => (n >= 100000 ? new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : n.toLocaleString('en-GB'))
+    assert.equal(await page.innerText('#s-events'), num(doc.events.total))
+    assert.equal(await page.innerText('#s-authors'), num(doc.events.authors))
+    assert.ok(Number(await page.innerText('#s-live')) >= 1, 'hay al menos una conexión (la de la prueba)')
+    assert.equal(await page.innerText('#s-accepted'), num(doc.last24h.saved + doc.last24h.ephemeral))
+    assert.equal(await page.innerText('#s-blocked'), num(doc.last24h.rejected))
+    assert.equal(await page.locator('#chart g').count(), 24, 'una columna por hora')
+    assert.ok((await page.locator('#chart rect.bar-saved, #chart rect.bar-eph').evaluateAll((r) => r.filter((x) => Number(x.getAttribute('height')) > 0).length)) > 0, 'la gráfica tiene barras')
+    assert.ok(/stored/.test(await page.locator('#chart g title').first().textContent()), 'cada hora tiene su texto accesible')
+    const kinds = await page.innerText('#kinds')
+    assert.match(kinds, /Notes/); assert.match(kinds, /Reactions/)
+    assert.ok(!/direct messages|kind 4\b/i.test(kinds), 'los mensajes privados no salen en el desglose')
+    assert.match(await page.innerText('#s-note'), /Running for .*Only totals are shown/)
+
+    // nada privado en la página (ni claves, ni contenido de eventos, ni la IP)
+    const text = await page.evaluate(() => document.body.innerText + document.documentElement.innerHTML)
+    for (const secret of [a.pk, b.pk, a.pk.slice(0, 8), 'nota pública', 'mensaje privado', '127.0.0.1:' + new URL(stack.relayHttp).port]) assert.ok(!text.includes(secret), `la portada no debe contener ${secret}`)
+
+    // español (los tipos y los textos se traducen) y vuelta al inglés
+    await page.click('[data-lang=es]')
+    assert.equal(await page.innerText('#h-activity'), 'Actividad')
+    assert.match(await page.innerText('#kinds'), /Notas/)
+    assert.match(await page.innerText('#s-note'), /En marcha desde hace .*Solo se enseñan totales/)
+    assert.equal(await page.innerText('#s-events'), (doc.events.total >= 100000 ? new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 }).format(doc.events.total) : doc.events.total.toLocaleString('es')))
+    await page.click('[data-lang=en]')
+    assert.equal(await page.innerText('#h-activity'), 'Activity')
+    await ctx.close()
+
+    // en el móvil cabe sin desplazamiento horizontal
+    const m = await open({ ...devices['iPhone 13'] })
+    await m.page.goto(stack.homeUrl)
+    await m.page.waitForSelector('#activity:not([hidden])')
+    assert.equal(await m.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, 'la portada con cifras no se ensancha en el móvil')
+    await m.ctx.close()
+
+    // si /stats.json falla, la sección no sale y el resto de la página sigue igual
+    const f = await open({}, false)
+    await f.page.route('**/stats.json', (route) => route.abort())
+    await f.page.goto(stack.homeUrl)
+    await f.page.waitForFunction(() => document.getElementById('name').textContent === 'Relé de pruebas')
+    assert.equal(await f.page.isHidden('#activity'), true)
+    assert.match(await f.page.innerText('#status-text'), /Online/)
+    await f.ctx.close()
+  })
+
   it('la ayuda explica todas las etiquetas del panel y los botones ? llevan a su sección', async () => {
     const { ctx, page } = await openPanel()
     await page.click('#help-btn')

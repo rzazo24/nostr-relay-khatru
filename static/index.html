@@ -25,6 +25,24 @@
 
     <p id="description" class="lead"></p>
 
+    <section id="activity" aria-labelledby="h-activity" hidden>
+      <h2 id="h-activity" data-i18n="activity">Activity</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-events">–</b><span data-i18n="s_events">Events stored</span></div>
+        <div class="stat"><b id="s-authors">–</b><span data-i18n="s_authors">Different authors</span></div>
+        <div class="stat"><b id="s-live">–</b><span data-i18n="s_live">Connected now</span></div>
+        <div class="stat"><b id="s-accepted">–</b><span data-i18n="s_accepted">Accepted, last 24 h</span></div>
+        <div class="stat"><b id="s-blocked">–</b><span data-i18n="s_blocked">Blocked, last 24 h</span></div>
+      </div>
+      <figure class="chart">
+        <svg id="chart" viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-labelledby="chart-cap"></svg>
+        <div class="axis"><span data-i18n="ago24">24 h ago</span><span data-i18n="now">now</span></div>
+        <figcaption id="chart-cap"><span class="key key-saved" aria-hidden="true"></span><span data-i18n="k_saved">stored</span> <span class="key key-eph" aria-hidden="true"></span><span data-i18n="k_eph">ephemeral (relayed, not stored)</span></figcaption>
+      </figure>
+      <ul id="kinds" class="chips"></ul>
+      <p id="s-note" class="hint"></p>
+    </section>
+
     <div class="cols">
     <div class="col">
     <section aria-labelledby="h-address">

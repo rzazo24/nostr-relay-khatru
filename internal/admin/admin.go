@@ -115,6 +115,11 @@ type Panel struct {
 
 	cacheAt  time.Time
 	cacheVal *eventStats
+
+	// /stats.json (público): documento ya serializado y cuándo se calculó
+	pubMu   sync.Mutex
+	pubAt   time.Time
+	pubBody []byte
 }
 
 // New abre la base de datos en modo solo consulta y prepara el panel.
@@ -123,9 +128,7 @@ func New(o Options) (*Panel, error) {
 		o.Now = time.Now
 	}
 	p := &Panel{o: o, sessions: map[string]time.Time{}, used: map[string]time.Time{}, attempts: map[string][]time.Time{}}
-	if o.Owner == "" {
-		return p, nil
-	}
+	// Se abre aunque no haya dueño (el panel queda desactivado, pero /stats.json es público y necesita leer).
 	// `_query_only` impide cualquier escritura desde este panel, aunque hubiera un fallo.
 	db, err := sql.Open("sqlite3", "file:"+o.DBPath+"?_busy_timeout=5000&_query_only=true")
 	if err != nil {
@@ -150,6 +153,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/api/history", p.requireSession(p.history))
 	mux.HandleFunc("GET /admin/api/search", p.requireSession(p.search))
 	mux.HandleFunc("GET /admin/api/backup", p.requireSession(p.backup))
+	mux.HandleFunc("GET /stats.json", p.publicStats) // público a propósito: solo agregados (ver publicstats.go)
 	p.mountModeration(mux)
 }
 

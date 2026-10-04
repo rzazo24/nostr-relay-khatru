@@ -165,6 +165,8 @@ La gráfica de actividad tiene pestañas de **60 min / 24 h / 7 d / 30 d / 90 d*
 
 Al abrir la URL del relé en un navegador se ve una pequeña página de presentación (`static/index.html`, `landing.css`, `landing.js`; sin dependencias externas): nombre, icono y descripción del relé, su dirección `wss://` con un botón de copiar, los NIPs soportados, los límites y las reglas, en español e inglés. Se rellena sola con el documento NIP-11 del propio relé, así que siempre está al día. Caddy solo la sirve a los `GET` normales de `/`: los clientes de Nostr (`Accept: application/nostr+json`), los WebSockets y los `POST` de NIP-86 siguen llegando al relé sin tocar.
 
+**Estadísticas públicas.** La página de presentación enseña también una sección de *Actividad*: eventos guardados, autores distintos, conexiones en este momento, eventos aceptados y bloqueados en las últimas 24 horas, una gráfica de eventos por hora (guardados y efímeros) y los tipos de evento más frecuentes. Las cifras salen de `GET /stats.json`, que no pide sesión y se cachea 30 segundos. Lleva **solo agregados**: ni claves, ni direcciones IP, ni contenido, ni motivos de rechazo, y los tipos de mensajes privados (4, 13, 14, 1059) no salen en el desglose por tipo. Si el endpoint no responde, la sección simplemente no aparece. Cualquiera puede leer el mismo JSON (manda `Access-Control-Allow-Origin: *`).
+
 Para que la descripción sea bilingüe, escríbela como `English text | Texto en español` en `RELAY_DESCRIPTION`: todos los clientes muestran las dos, y la página de presentación enseña la del idioma elegido.
 
 ## Icono del relé

@@ -15,6 +15,14 @@ const T = {
     'rule-log': 'The relay does not log message content or IP addresses.',
     'rule-public': 'Notes are public: anyone can read what you publish here, and other relays may hold copies.',
     source: 'Source code', operator: 'Operator', contact: 'Contact',
+    activity: 'Activity', s_events: 'Events stored', s_authors: 'Different authors', s_live: 'Connected now',
+    s_accepted: 'Accepted, last 24 h', s_blocked: 'Blocked, last 24 h', ago24: '24 h ago', now: 'now',
+    k_saved: 'stored', k_eph: 'ephemeral (relayed, not stored)',
+    chart_label: 'Events per hour over the last 24 hours',
+    chart_tip: (h, s, e) => `${h}: ${s} stored, ${e} ephemeral`,
+    note: (up, since) => `Running for ${up}${since ? ` · oldest event: ${since}` : ''}. Only totals are shown: no keys, no addresses, no content.`,
+    d: 'd', h: 'h', min: 'min', kindWord: 'kind',
+    kinds: { 0: 'Profiles', 1: 'Notes', 3: 'Follow lists', 4: 'Old direct messages', 5: 'Deletions', 6: 'Reposts', 7: 'Reactions', 16: 'Generic reposts', 1984: 'Reports', 9735: 'Zaps', 10002: 'Relay lists', 30023: 'Articles', 30078: 'App data' },
     l_content: 'Max content length', l_content_v: (n) => `${n} characters`,
     l_limit: 'Max events per query', l_limit_v: (n) => `${n}`,
     l_tags: 'Max tags per event', l_msg: 'Max message size', l_msg_v: (n) => `${n} KB`,
@@ -36,6 +44,14 @@ const T = {
     'rule-log': 'El relé no registra el contenido de los mensajes ni las direcciones IP.',
     'rule-public': 'Las notas son públicas: cualquiera puede leer lo que publiques aquí, y otros relés pueden tener copias.',
     source: 'Código fuente', operator: 'Responsable', contact: 'Contacto',
+    activity: 'Actividad', s_events: 'Eventos guardados', s_authors: 'Autores distintos', s_live: 'Conectados ahora',
+    s_accepted: 'Aceptados, últimas 24 h', s_blocked: 'Bloqueados, últimas 24 h', ago24: 'hace 24 h', now: 'ahora',
+    k_saved: 'guardados', k_eph: 'efímeros (reenviados, no se guardan)',
+    chart_label: 'Eventos por hora en las últimas 24 horas',
+    chart_tip: (h, s, e) => `${h}: ${s} guardados, ${e} efímeros`,
+    note: (up, since) => `En marcha desde hace ${up}${since ? ` · evento más antiguo: ${since}` : ''}. Solo se enseñan totales: ni claves, ni direcciones, ni contenido.`,
+    d: 'd', h: 'h', min: 'min', kindWord: 'tipo',
+    kinds: { 0: 'Perfiles', 1: 'Notas', 3: 'Listas de seguidos', 4: 'Mensajes directos antiguos', 5: 'Borrados', 6: 'Reposts', 7: 'Reacciones', 16: 'Reposts genéricos', 1984: 'Denuncias', 9735: 'Zaps', 10002: 'Listas de relés', 30023: 'Artículos', 30078: 'Datos de apps' },
     l_content: 'Longitud máxima del contenido', l_content_v: (n) => `${n} caracteres`,
     l_limit: 'Máximo de eventos por consulta', l_limit_v: (n) => `${n}`,
     l_tags: 'Máximo de tags por evento', l_msg: 'Tamaño máximo de mensaje', l_msg_v: (n) => `${n} KB`,
@@ -52,6 +68,7 @@ const T = {
 let lang = (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en'
 let info = null
 let status = 'checking'
+let stats = null
 
 const $ = (id) => document.getElementById(id)
 const t = (key) => T[lang][key]
@@ -172,6 +189,83 @@ function render() {
   if (info.version && info.version !== 'dev') $('version').textContent = ' · ' + info.version
 }
 
+// --- Actividad: cifras agregadas de /stats.json (todo con textContent / atributos; nada de HTML) ---
+const SVG = 'http://www.w3.org/2000/svg'
+const compact = (n) => (n >= 100000 ? new Intl.NumberFormat(lang, { notation: 'compact', maximumFractionDigits: 1 }).format(n) : fmt(n))
+
+function duration(seconds) {
+  const m = Math.max(0, Math.floor(seconds / 60))
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60)
+  if (d > 0) return `${d} ${t('d')}${h ? ` ${h} ${t('h')}` : ''}`
+  if (h > 0) return `${h} ${t('h')}`
+  return `${m} ${t('min')}`
+}
+
+function renderChart(hours) {
+  const svg = $('chart')
+  svg.replaceChildren()
+  svg.setAttribute('aria-label', t('chart_label'))
+  const peak = Math.max(1, ...hours.map((h) => h.saved + h.ephemeral))
+  const w = 240 / hours.length
+  hours.forEach((h, i) => {
+    const g = document.createElementNS(SVG, 'g')
+    const title = document.createElementNS(SVG, 'title')
+    title.textContent = t('chart_tip')(new Date(h.t * 1000).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' }), fmt(h.saved), fmt(h.ephemeral))
+    g.append(title)
+    // stored events are far fewer than ephemeral ones: give them a visible minimum so the base strip never disappears
+    const sav = h.saved > 0 ? Math.max(3, (h.saved / peak) * 60) : 0
+    const eph = Math.max(0, (h.ephemeral / peak) * 60 - (sav > (h.saved / peak) * 60 ? sav - (h.saved / peak) * 60 : 0))
+    const bar = (cls, y, height) => {
+      const r = document.createElementNS(SVG, 'rect')
+      r.setAttribute('class', cls)
+      r.setAttribute('x', String(i * w + 0.5))
+      r.setAttribute('width', String(Math.max(0.5, w - 1)))
+      r.setAttribute('y', String(y))
+      r.setAttribute('height', String(Math.max(0, height)))
+      g.append(r)
+    }
+    bar('bar-eph', 62 - eph - sav, eph)
+    bar('bar-saved', 62 - sav, sav)
+    // a thin baseline mark so that quiet hours are still visible as a column
+    bar('bar-base', 62, 0.8)
+    svg.append(g)
+  })
+}
+
+function renderStats() {
+  const sec = $('activity')
+  if (!stats) { sec.hidden = true; return }
+  sec.hidden = false
+  const ev = stats.events, day = stats.last24h
+  $('s-events').textContent = compact(ev.total)
+  $('s-authors').textContent = compact(ev.authors)
+  $('s-live').textContent = fmt(stats.connections)
+  $('s-accepted').textContent = compact(day.saved + day.ephemeral)
+  $('s-blocked').textContent = compact(day.rejected)
+  renderChart(day.hours)
+  const kinds = $('kinds')
+  kinds.replaceChildren()
+  for (const k of ev.byKind.slice(0, 6)) {
+    const li = document.createElement('li')
+    const a = document.createElement('span')
+    a.className = 'pill'
+    const b = document.createElement('b')
+    b.textContent = fmt(k.count)
+    a.append(b, document.createTextNode(` ${T[lang].kinds[k.kind] || `${t('kindWord')} ${k.kind}`}`))
+    li.append(a)
+    kinds.append(li)
+  }
+  const since = ev.oldest ? new Date(ev.oldest * 1000).toLocaleDateString(lang, { year: 'numeric', month: 'short', day: 'numeric' }) : ''
+  $('s-note').textContent = t('note')(duration(stats.now - stats.startedAt), since)
+}
+
+function loadStats() {
+  fetch('/stats.json')
+    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+    .then((s) => { stats = s; renderStats() })
+    .catch(() => { /* sin cifras, la sección queda oculta: el resto de la página no depende de ella */ })
+}
+
 async function copyAddress() {
   const text = $('address').textContent
   let ok = false
@@ -192,9 +286,11 @@ async function copyAddress() {
   setTimeout(() => { $('copied').textContent = '' }, 2500)
 }
 
-document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.lang; render() }))
+document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.lang; render(); renderStats() }))
 $('copy').addEventListener('click', copyAddress)
 render()
+loadStats()
+setInterval(() => { if (!document.hidden) loadStats() }, 60000) // las cifras se refrescan solas mientras la pestaña se ve
 
 fetch('/', { headers: { Accept: 'application/nostr+json' } })
   .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json() })

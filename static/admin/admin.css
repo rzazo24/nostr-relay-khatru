@@ -45,9 +45,16 @@ dialog:focus, dialog:focus-visible { outline:none; }
 table { width:100%; border-collapse:collapse; font-size:.85rem; }
 th,td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); white-space:nowrap; } th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--panel); }
 td.reason { white-space:normal; min-width:200px; }
-.recent { list-style:none; margin:0; padding:0; } .recent li { padding:8px 0; border-bottom:1px solid var(--border); }
-.recent .meta { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; font-size:.85rem; color:var(--muted); }
-.recent .body { margin-top:2px; overflow-wrap:anywhere; }
+.recent { list-style:none; margin:0; padding:0; }
+/* Cada evento es una tarjeta con el borde izquierdo del color de su familia de tipos (ver kindFamily en admin.js). */
+.recent li { margin:0 0 8px; padding:9px 12px; background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--kc, var(--muted)); border-radius:10px; }
+.recent .meta { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:.85rem; color:var(--muted); }
+.recent .body { margin-top:6px; overflow-wrap:anywhere; }
+/* Insignia del tipo: número y nombre, con el color de la familia */
+[data-fam] { --kc:var(--muted); }
+[data-fam=note] { --kc:#2dd4bf; } [data-fam=react] { --kc:#f472b6; } [data-fam=profile] { --kc:#60a5fa; } [data-fam=private] { --kc:#c084fc; }
+[data-fam=ephemeral] { --kc:#38bdf8; } [data-fam=app] { --kc:#a3e635; } [data-fam=auth] { --kc:#fb923c; } [data-fam=delete] { --kc:#f87171; } [data-fam=zap] { --kc:#fbbf24; }
+.kbadge { display:inline-block; padding:1px 9px; border-radius:999px; font-size:.78rem; font-weight:600; line-height:1.5; white-space:nowrap; color:var(--kc); background:color-mix(in srgb, var(--kc) 14%, transparent); border:1px solid color-mix(in srgb, var(--kc) 40%, transparent); }
 .pk { font:.85rem ui-monospace,SFMono-Regular,Menlo,monospace; background:none; border:none; padding:0; color:var(--accent); cursor:copy; }
 .badge { font-size:.75rem; border:1px solid var(--accent); color:var(--accent); border-radius:999px; padding:0 8px; }
 .kv { display:grid; grid-template-columns:1fr auto; gap:6px 16px; margin:0; } .kv dt { color:var(--muted); } .kv dd { margin:0; text-align:right; overflow-wrap:anywhere; }

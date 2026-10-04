@@ -18,6 +18,22 @@ const KIND_NAMES = {
 }
 const kindName = (k) => KIND_NAMES[k] ? `${k} · ${t(KIND_NAMES[k])}` : String(k)
 
+// Familia de un tipo de evento: define el color de su insignia y del borde de la tarjeta, para distinguirlos de un vistazo.
+// (El color nunca es lo único que informa: la insignia siempre lleva el número y el nombre.)
+function kindFamily(k) {
+  if ([4, 13, 14, 1059, 10050].includes(k)) return 'private'
+  if ([5, 1984].includes(k)) return 'delete'
+  if (k === 7) return 'react'
+  if (k === 9734 || k === 9735) return 'zap'
+  if ([1, 6, 16, 30023].includes(k)) return 'note'
+  if ([22242, 24133, 27235].includes(k)) return 'auth'
+  if (k >= 20000 && k < 30000) return 'ephemeral'
+  if (k >= 30000 && k < 40000) return 'app'
+  if (k === 0 || k === 3 || (k >= 10000 && k < 20000)) return 'profile'
+  return 'other'
+}
+const kindBadge = (k) => el('span', { class: 'kbadge', 'data-fam': kindFamily(k), text: kindName(k) })
+
 function el(tag, attrs, ...children) {
   const n = document.createElement(tag)
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -223,7 +239,7 @@ function render(d) {
   const tbody = $('rejections').querySelector('tbody')
   tbody.replaceChildren(...d.activity.rejections.map((r) => el('tr', {},
     el('td', { text: clock(r.t) }), el('td', { text: r.what === 'event' ? t('evento') : t('consulta') }),
-    el('td', { text: r.kind >= 0 ? String(r.kind) : '—' }), el('td', {}, r.pubkey ? searchButton(r.pubkey) : '—'), el('td', { class: 'reason', text: r.reason }))))
+    el('td', {}, r.kind >= 0 ? kindBadge(r.kind) : '—'), el('td', {}, r.pubkey ? searchButton(r.pubkey) : '—'), el('td', { class: 'reason', text: r.reason }))))
 
   labelTable('rejections')
   const noisyBody = $('noisy').querySelector('tbody')
@@ -260,7 +276,7 @@ function noisyRow(n, now) {
     })
     acts.append(ban)
   }
-  return el('tr', {}, el('td', {}, pk), el('td', { text: fmt(n.count) }), el('td', { text: String(n.kind) }), el('td', { class: 'reason', text: n.reason }), el('td', { text: ago(n.last, now) }), acts)
+  return el('tr', {}, el('td', {}, pk), el('td', { text: fmt(n.count) }), el('td', {}, kindBadge(n.kind)), el('td', { class: 'reason', text: n.reason }), el('td', { text: ago(n.last, now) }), acts)
 }
 
 // Fila de un evento (en «Eventos recientes" y en los resultados de la búsqueda). Las acciones de
@@ -269,7 +285,7 @@ function eventItem(e, now, { source, searchKey } = {}) {
   const pk = el('button', { class: 'pk', type: 'button', title: searchKey ? t('Buscar todo lo de esta clave') : t('Copiar clave completa'), text: e.pubkey.slice(0, 12) + '…' })
   if (searchKey) pk.addEventListener('click', () => searchFor(e.pubkey, ''))
   else pk.addEventListener('click', () => navigator.clipboard.writeText(e.pubkey).then(() => { pk.textContent = t('copiada ✓'); setTimeout(() => { pk.textContent = e.pubkey.slice(0, 12) + '…' }, 1200) }).catch(() => {}))
-  const meta = el('div', { class: 'meta' }, el('span', { text: ago(e.createdAt, now) }), el('span', { text: kindName(e.kind) }), pk)
+  const meta = el('div', { class: 'meta' }, kindBadge(e.kind), el('span', { class: 'when', text: ago(e.createdAt, now) }), pk)
   if (!searchKey) {
     const more = el('button', { class: 'act', type: 'button', text: t('Sus eventos'), title: t('Buscar todo lo que ha publicado esta clave') })
     more.addEventListener('click', () => { searchFor(e.pubkey, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
@@ -292,7 +308,7 @@ function eventItem(e, now, { source, searchKey } = {}) {
     acts.append(veto, ban)
     meta.append(acts)
   }
-  return el('li', {}, meta, e.content ? el('div', { class: 'body', text: e.content }) : null)
+  return el('li', { 'data-fam': kindFamily(e.kind) }, meta, e.content ? el('div', { class: 'body', text: e.content }) : null)
 }
 
 function fillKv(dl, rows) {

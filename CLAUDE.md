@@ -139,6 +139,11 @@ Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the transla
 **Hover is mouse-only**: every `:hover` rule that changes colours/borders (panel `admin.css`, `landing.css`) lives inside `@media (hover:hover)`; on touch
 screens hover sticks after a tap, so a tapped button ("Actualizar") stayed green. The mobile panel test taps `#refresh` and asserts its border is unchanged.
 Keep new hover styles inside that media query.
+**Event types are colour-coded**: `kindFamily(k)` in `admin.js` maps a kind to a family (note, react, profile, private, ephemeral, app, auth, delete, zap, other);
+`kindBadge(k)` draws the pill (number + name, so colour is never the only cue) and event cards (`#recent`, search results) get `data-fam` for the coloured left
+border. Colours are the `[data-fam=…]{--kc}` rules in `admin.css`; the same badge is used in the Rejections and Noisy keys tables. Help text for it lives in `h-recent`
+(with its English entry in `i18n.en.js`). Panel test: «los eventos se distinguen de un vistazo…».
+
 **Pressed-button flash**: `admin.js` puts class `flash` on any `<button>` for 1 s after a click (delegated listener), and `admin.css` lights it (border + glow, red for
 `.danger`) with a 0.35 s fade; nothing stays lit. The help `<dialog>` has `tabindex="-1" autofocus` and `openHelp()` focuses it, so the browser does not auto-focus
 «Cerrar» (it kept the green focus ring). Panel test: «botones: el de cerrar la ayuda…».

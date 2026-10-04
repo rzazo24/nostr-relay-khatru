@@ -5,6 +5,7 @@
 window.PANEL_EN = {
   html: {
     "5c679508": "<b>Language</b>: the <b>EN</b> / <b>ES</b> buttons at the top switch the panel between English and Spanish, help included. It is remembered in that browser; the first time the browser's language decides.", /* Idioma: los botones EN / ES de arriba cambian el panel entre inglés y español... */
+    "1fc93583": "Each event type has its own <b>colour badge</b> (the number and the name) and the card border in the same colour: <b>notes</b> in teal, <b>reactions</b> in pink, <b>profiles and lists</b> in blue, <b>private messages</b> in violet, <b>app data</b> in lime green, <b>ephemeral</b> in light blue, <b>authentication</b> in orange, <b>deletions and reports</b> in red and <b>zaps</b> in yellow. The same badges appear in “Rejections” and in “Noisiest keys”.", /* Cada tipo de evento lleva su insignia de color… */
     "4b13e002": "Relay panel", /* Panel del relé */
     "179a5a16": "Loading…", /* Cargando… */
     "530cc80d": "Help", /* Ayuda */

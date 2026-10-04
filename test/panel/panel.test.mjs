@@ -208,6 +208,40 @@ describe('panel de control', () => {
     await ctx.close()
   })
 
+  it('los eventos se distinguen de un vistazo: cada familia de tipos tiene su insignia y su color', async () => {
+    const a = newKey(), b = newKey()
+    await pub(a.sk, 1, 'una nota de texto')
+    await pub(a.sk, 7, '+', [['e', 'a'.repeat(64)], ['p', b.pk]])
+    await pub(a.sk, 0, '{"name":"alguien"}')
+    await pub(a.sk, 30078, 'datos de una app', [['d', 'mi-app']])
+    await pub(b.sk, 4, 'privado secreto', [['p', stack.ownerPk]])
+    await pub(a.sk, 1, 'x'.repeat(900)) // rechazada por tamaño: sale en Rechazos con su tipo
+    const { ctx, page } = await openPanel()
+    await login(page)
+    await refreshUntil(page, () => document.querySelectorAll('#recent li').length >= 5 && document.querySelectorAll('#rejections tbody tr').length > 0)
+    const rows = await page.$$eval('#recent li', (lis) => lis.map((li) => {
+      const b = li.querySelector('.kbadge')
+      return { fam: li.dataset.fam, badgeFam: b && b.dataset.fam, text: b && b.textContent, edge: getComputedStyle(li).borderLeftColor, badgeColor: b && getComputedStyle(b).color, badgeBg: b && getComputedStyle(b).backgroundColor }
+    }))
+    const byText = (re) => rows.find((r) => re.test(r.text || ''))
+    const fam = { nota: byText(/^1 · /), reaccion: byText(/^7 · /), perfil: byText(/^0 · /), app: byText(/^30078 · /), privado: byText(/^4 · /) }
+    for (const [k, v] of Object.entries(fam)) assert.ok(v, `hay un evento ${k} en la lista: ${JSON.stringify(rows.map((r) => r.text))}`)
+    assert.deepEqual({ nota: fam.nota.fam, reaccion: fam.reaccion.fam, perfil: fam.perfil.fam, app: fam.app.fam, privado: fam.privado.fam },
+      { nota: 'note', reaccion: 'react', perfil: 'profile', app: 'app', privado: 'private' }, 'familia de cada tipo')
+    for (const v of Object.values(fam)) assert.equal(v.badgeFam, v.fam, 'la insignia y la tarjeta comparten familia')
+    const edges = new Set(Object.values(fam).map((v) => v.edge)), colors = new Set(Object.values(fam).map((v) => v.badgeColor))
+    assert.equal(edges.size, 5, `cada familia tiene su color en el borde de la tarjeta: ${[...edges]}`)
+    assert.equal(colors.size, 5, 'y en la insignia')
+    for (const v of Object.values(fam)) assert.notEqual(v.badgeBg, 'rgba(0, 0, 0, 0)', 'la insignia lleva fondo propio')
+    // el texto (el número y el nombre) sigue ahí: el color no es lo único que informa
+    assert.match(fam.nota.text, /^1 · Nota$/); assert.match(fam.privado.text, /^4 · /)
+    // Rechazos: el tipo también sale como insignia
+    assert.ok((await page.locator('#rejections tbody .kbadge').count()) > 0, 'la tabla de rechazos usa la insignia del tipo')
+    // el contenido privado sigue sin llegar
+    assert.ok(!(await page.innerText('#recent')).includes('secreto'))
+    await ctx.close()
+  })
+
   it('la ayuda explica todas las etiquetas del panel y los botones ? llevan a su sección', async () => {
     const { ctx, page } = await openPanel()
     await page.click('#help-btn')

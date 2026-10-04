@@ -65,7 +65,16 @@ const T = {
   },
 }
 
-let lang = (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en'
+// El idioma elegido con los botones EN/ES se recuerda en este navegador (localStorage); sin elección, manda el idioma del navegador.
+// Todo el acceso al almacenamiento va en try/catch: en modo privado o con el almacenamiento bloqueado la página funciona igual.
+const LANG_KEY = 'landing-lang'
+function storedLang() {
+  try { const v = localStorage.getItem(LANG_KEY); return v === 'es' || v === 'en' ? v : null } catch { return null }
+}
+function rememberLang(l) {
+  try { localStorage.setItem(LANG_KEY, l) } catch { /* no se puede recordar: no pasa nada */ }
+}
+let lang = storedLang() || ((navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en')
 let info = null
 let status = 'checking'
 let stats = null
@@ -286,7 +295,7 @@ async function copyAddress() {
   setTimeout(() => { $('copied').textContent = '' }, 2500)
 }
 
-document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.lang; render(); renderStats() }))
+document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.lang; rememberLang(lang); render(); renderStats() }))
 $('copy').addEventListener('click', copyAddress)
 render()
 loadStats()

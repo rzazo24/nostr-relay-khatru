@@ -307,6 +307,52 @@ describe('panel de control', () => {
     await f.ctx.close()
   })
 
+  it('página de inicio: el idioma elegido se recuerda en el navegador (y sin almacenamiento sigue funcionando)', async () => {
+    const mk = async (opts = {}, init = null) => {
+      const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 }, locale: 'en-GB', ...opts })
+      if (init) await ctx.addInitScript(init)
+      const page = await ctx.newPage()
+      page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`))
+      return { ctx, page }
+    }
+    const heading = (page) => page.innerText('#h-address')
+    // el navegador está en inglés: sale en inglés; se elige español, se recarga y sigue en español
+    const { ctx, page } = await mk()
+    await page.goto(stack.homeUrl)
+    await page.waitForFunction(() => document.getElementById('status-text').textContent === 'Online')
+    assert.equal(await heading(page), 'Relay address')
+    await page.click('[data-lang=es]')
+    assert.equal(await heading(page), 'Dirección del relé')
+    assert.equal(await page.evaluate(() => localStorage.getItem('landing-lang')), 'es', 'la elección queda guardada')
+    await page.reload()
+    await page.waitForFunction(() => document.getElementById('status-text').textContent === 'En línea')
+    assert.equal(await heading(page), 'Dirección del relé', 'tras recargar sigue en español aunque el navegador esté en inglés')
+    assert.equal(await page.getAttribute('[data-lang=es]', 'aria-pressed'), 'true')
+    await page.click('[data-lang=en]')
+    await page.reload()
+    await page.waitForFunction(() => document.getElementById('status-text').textContent === 'Online')
+    assert.equal(await heading(page), 'Relay address', 'y se puede volver al inglés')
+    await ctx.close()
+
+    // un valor guardado que no vale se ignora (manda el idioma del navegador)
+    const bad = await mk({ locale: 'es-ES' }, () => { try { localStorage.setItem('landing-lang', 'klingon') } catch { /* nada */ } })
+    await bad.page.goto(stack.homeUrl)
+    await bad.page.waitForFunction(() => document.getElementById('status-text').textContent === 'En línea')
+    assert.equal(await heading(bad.page), 'Dirección del relé')
+    await bad.ctx.close()
+
+    // sin almacenamiento (modo privado, bloqueado): la página funciona y se puede cambiar de idioma, solo que no se recuerda
+    const blocked = await mk({}, () => {
+      const deny = () => { throw new DOMException('blocked', 'SecurityError') }
+      Object.defineProperty(window, 'localStorage', { get: deny })
+    })
+    await blocked.page.goto(stack.homeUrl)
+    await blocked.page.waitForFunction(() => document.getElementById('status-text').textContent === 'Online')
+    await blocked.page.click('[data-lang=es]')
+    assert.equal(await heading(blocked.page), 'Dirección del relé')
+    await blocked.ctx.close()
+  })
+
   it('la ayuda explica todas las etiquetas del panel y los botones ? llevan a su sección', async () => {
     const { ctx, page } = await openPanel()
     await page.click('#help-btn')

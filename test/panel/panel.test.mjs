@@ -241,6 +241,47 @@ describe('panel de control', () => {
     await ctx.close()
   })
 
+  it('botones: el de cerrar la ayuda no se queda iluminado y los demás se iluminan un instante sin quedarse fijos', async () => {
+    const { ctx, page } = await openPanel()
+    const ACCENT = 'rgb(45, 212, 191)'
+    const look = (sel) => page.evaluate((q) => { const c = getComputedStyle(document.querySelector(q)); return { border: c.borderTopColor, outline: c.outlineStyle === 'none' ? 'none' : c.outlineColor, shadow: c.boxShadow } }, sel)
+
+    // la ayuda: al abrirla el foco lo toma el propio cuadro, no «Cerrar» (que se quedaba con el aro verde fijo)
+    await page.click('#help-btn')
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'help', 'el foco inicial es el cuadro de la ayuda y no un botón')
+    await page.mouse.move(2, 2)
+    await sleep(500)
+    const idle = await look('#help-close')
+    assert.notEqual(idle.border, ACCENT, 'el borde de «Cerrar» no es verde en reposo')
+    assert.equal(idle.outline, 'none', '«Cerrar» no lleva aro de foco al abrir la ayuda')
+    await page.keyboard.press('Escape')
+
+    // Tab sigue enseñando el foco (accesibilidad): el aro solo se quita al abrir
+    await login(page)
+    const base = await look('#refresh')
+    assert.notEqual(base.border, ACCENT)
+
+    // pulsar «Actualizar»: se ilumina un instante...
+    await page.click('#refresh')
+    await page.mouse.move(2, 2) // sin el ratón encima: lo que se ve es solo el destello
+    await sleep(500) // la transición del borde dura 0,35 s
+    assert.equal(await page.evaluate(() => document.getElementById('refresh').classList.contains('flash')), true, 'el botón recién pulsado tiene el destello')
+    assert.equal((await look('#refresh')).border, ACCENT, 'y se ve iluminado')
+    // ...y no se queda fijo
+    await sleep(1300)
+    assert.equal(await page.evaluate(() => document.getElementById('refresh').classList.contains('flash')), false, 'a los ~1,2 s el destello se quita solo')
+    const after = await look('#refresh')
+    assert.equal(after.border, base.border, 'el borde vuelve al normal')
+    assert.equal(after.shadow, base.shadow, 'y el brillo también')
+
+    // lo mismo con otros botones (pestañas, ayuda): se iluminan y se apagan
+    await page.click('.tabs [data-range="7d"]')
+    await page.mouse.move(2, 2)
+    await sleep(1700)
+    assert.equal(await page.evaluate(() => document.querySelectorAll('button.flash').length), 0, 'ningún botón se queda con el destello')
+    await ctx.close()
+  })
+
   it('las pestañas de actividad muestran el histórico persistido', async () => {
     const { ctx, page } = await openPanel()
     await login(page)
@@ -727,8 +768,8 @@ describe('panel de control', () => {
     const borderOf = (sel) => page.evaluate((q) => getComputedStyle(document.querySelector(q)).borderTopColor, sel)
     const before = await borderOf('#refresh')
     await page.tap('#refresh')
-    await sleep(300)
-    assert.equal(await borderOf('#refresh'), before, `«Actualizar» conserva su borde normal tras tocarlo (antes ${before})`)
+    await sleep(1500) // el destello de ~1 s ya se ha apagado: no queda nada fijo
+    assert.equal(await borderOf('#refresh'), before, `«Actualizar» recupera su borde normal tras el destello (antes ${before})`)
     assert.notEqual(await borderOf('#refresh'), 'rgb(45, 212, 191)', 'el borde no se queda verde')
 
     // la ayuda ocupa la pantalla entera

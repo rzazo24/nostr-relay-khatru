@@ -735,11 +735,22 @@ foldApply()
 const helpDialog = $('help')
 function openHelp(anchor) {
   if (!helpDialog.open) helpDialog.showModal()
+  helpDialog.focus({ preventScroll: true }) // el foco lo toma el cuadro, no «Cerrar»: así ese botón no se queda con el aro verde fijo
   const target = anchor && document.getElementById(anchor)
   // el contenido se desplaza dentro del diálogo; sin ancla, se vuelve arriba
   if (target) target.scrollIntoView({ block: 'start' })
   else $('help-body').scrollTop = 0
 }
+// Destello: todo botón se ilumina ~1 s al pulsarlo (táctil o ratón) y se apaga solo; nunca se queda fijo.
+// (El «hover» pegado en pantallas táctiles lo evita @media (hover:hover) del CSS; el aro de foco con teclado se conserva.)
+document.addEventListener('click', (e) => {
+  const b = e.target instanceof Element && e.target.closest('button')
+  if (!b) return
+  b.classList.add('flash')
+  clearTimeout(b._flash)
+  b._flash = setTimeout(() => b.classList.remove('flash'), 1000)
+})
+
 $('help-btn').addEventListener('click', () => openHelp())
 $('help-close').addEventListener('click', () => helpDialog.close())
 // clic fuera del cuadro (en el fondo oscuro) cierra

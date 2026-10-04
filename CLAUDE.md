@@ -139,6 +139,9 @@ Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the transla
 **Hover is mouse-only**: every `:hover` rule that changes colours/borders (panel `admin.css`, `landing.css`) lives inside `@media (hover:hover)`; on touch
 screens hover sticks after a tap, so a tapped button ("Actualizar") stayed green. The mobile panel test taps `#refresh` and asserts its border is unchanged.
 Keep new hover styles inside that media query.
+**Pressed-button flash**: `admin.js` puts class `flash` on any `<button>` for 1 s after a click (delegated listener), and `admin.css` lights it (border + glow, red for
+`.danger`) with a 0.35 s fade; nothing stays lit. The help `<dialog>` has `tabindex="-1" autofocus` and `openHelp()` focuses it, so the browser does not auto-focus
+«Cerrar» (it kept the green focus ring). Panel test: «botones: el de cerrar la ayuda…».
 
 **Phone layout** (end of `static/admin/admin.css`, `@media (max-width:700px), (pointer:coarse)` + `(max-width:700px)`): grids need `min-width:0`
 (a table inside a grid item made the page 535 px wide on a 390 px phone); inputs must be ≥16 px or iOS zooms on focus; tap targets ≥40–44 px; tables get class `stack`

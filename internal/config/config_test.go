@@ -100,3 +100,30 @@ func TestLoad_DirectoryFields(t *testing.T) {
 		t.Fatal("por defecto no hay etiquetas ni idiomas")
 	}
 }
+
+func TestLoad_NewKeyTrialPeriod(t *testing.T) {
+	c, err := Load(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.NewKeyHours != 0 || len(c.NewKeyKinds) != 4 || c.NewKeyKinds[0] != 1 || c.NewKeyKinds[3] != 30023 {
+		t.Fatalf("por defecto: desactivado, y aplaza notas, reposts, reposts genéricos y artículos: %+v", c)
+	}
+	c, err = Load(env(map[string]string{"RELAY_NEW_KEY_HOURS": "24", "RELAY_NEW_KEY_KINDS": "1, 7"}))
+	if err != nil || c.NewKeyHours != 24 || len(c.NewKeyKinds) != 2 || c.NewKeyKinds[1] != 7 {
+		t.Fatalf("valores propios: %v %+v", err, c)
+	}
+	for _, bad := range []map[string]string{
+		{"RELAY_NEW_KEY_HOURS": "-1"}, {"RELAY_NEW_KEY_HOURS": "abc"}, {"RELAY_NEW_KEY_HOURS": "99999"},
+		{"RELAY_NEW_KEY_KINDS": "uno,2"}, {"RELAY_NEW_KEY_KINDS": "1,-5"},
+	} {
+		_, err := Load(env(bad))
+		var name string
+		for k := range bad {
+			name = k
+		}
+		if err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("%v debe fallar nombrando la variable: %v", bad, err)
+		}
+	}
+}

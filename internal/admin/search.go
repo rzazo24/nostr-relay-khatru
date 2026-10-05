@@ -206,6 +206,7 @@ func (p *Panel) search(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		e.Mine = e.PubKey == p.o.Owner
+		e.NewKey = p.isNewKey(e.PubKey, p.o.Now())
 		if !privateKinds[e.Kind] {
 			e.Content = snippet(content, searchSnippet)
 		}

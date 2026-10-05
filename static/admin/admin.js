@@ -254,7 +254,7 @@ function render(d) {
   fillKv($('config'), [
     ['NIPs', (c.nips || []).join(', ')], [t('Retención'), c.retentionDays ? t('{n} días', { n: c.retentionDays }) : t('sin límite')], [t('Contenido máx.'), t('{n} caracteres', { n: fmt(c.maxContentLength) })], [t('Mensaje máx.'), bytes(c.maxMessageBytes)], [t('Tags por evento'), fmt(c.maxEventTags)],
     [t('Eventos por consulta'), fmt(c.maxLimit)], [t('Sync NIP-77 máx.'), fmt(c.maxNegentropyEvents)], [t('Fecha futura máx.'), `${Math.round(c.maxFutureSkewSec / 60)} min`],
-    [t('Prueba de trabajo'), c.minPoW ? `${c.minPoW} bits` : t('no')], [t('Auth obligatoria'), c.authRequired ? t('sí') : t('no')], [t('Tipos privados'), list(c.privateKinds)],
+    [t('Prueba de trabajo'), c.minPoW ? `${c.minPoW} bits` : t('no')], [t('Claves nuevas'), c.newKeyHours ? t('{n} h sin notas', { n: c.newKeyHours }) : t('sin restricción')], [t('Auth obligatoria'), c.authRequired ? t('sí') : t('no')], [t('Tipos privados'), list(c.privateKinds)],
     [t('Eventos/min por IP'), t('{n} (ráfaga {b})', { n: c.eventsPerMinute, b: c.eventsBurst })], [t('Consultas/min por IP'), t('{n} (ráfaga {b})', { n: c.reqsPerMinute, b: c.reqsBurst })], [t('Conexiones/min por IP'), t('{n} (ráfaga {b})', { n: c.connsPerMinute, b: c.connsBurst })],
   ])
 }
@@ -291,6 +291,7 @@ function eventItem(e, now, { source, searchKey } = {}) {
     more.addEventListener('click', () => { searchFor(e.pubkey, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
     meta.append(more)
   }
+  if (e.newKey) meta.append(el('span', { class: 'badge new', text: t('nueva'), title: t('El relé vio esta clave por primera vez hace poco') }))
   if (e.mine) meta.append(el('span', { class: 'badge', text: t('tuyo') }))
   else {
     const acts = el('span', { class: 'actions2' })

@@ -353,6 +353,30 @@ describe('panel de control', () => {
     await blocked.ctx.close()
   })
 
+  it('cuentas nuevas: la insignia «nueva» sale en los recientes y en la búsqueda (no en el dueño), y la configuración dice si hay periodo de prueba', async () => {
+    const fresh = newKey()
+    await pub(fresh.sk, 1, 'nota de una clave recién llegada')
+    await pub(stack.ownerSecret, 1, 'nota del dueño')
+    // (que una clave deje de ser «nueva» con el tiempo lo prueba el test de Go TestNewKeys_ProbationEndToEnd)
+    const { ctx, page } = await openPanel()
+    await login(page)
+    await refreshUntil(page, () => [...document.querySelectorAll('#recent li')].some((li) => li.textContent.includes('recién llegada')))
+    const badgeOf = (text) => page.evaluate((t) => { const li = [...document.querySelectorAll('#recent li')].find((x) => x.textContent.includes(t)); return li ? !!li.querySelector('.badge.new') : null }, text)
+    assert.equal(await badgeOf('recién llegada'), true, 'la clave recién vista lleva «nueva»')
+    assert.equal(await badgeOf('del dueño'), false, 'el dueño nunca es «nueva»')
+    assert.equal((await page.locator('#recent li', { hasText: 'recién llegada' }).locator('.badge.new').innerText()).trim(), 'nueva')
+    // la configuración: sin periodo de prueba por defecto
+    assert.match(await page.innerText('#config'), /Claves nuevas\s+sin restricción/)
+    // la búsqueda también la enseña
+    await page.fill('#f-search [name=q]', fresh.pk)
+    await page.click('#f-search button[type=submit]')
+    await page.waitForSelector('#search-out .resultinfo')
+    assert.equal(await page.locator('#search-out li .badge.new').count() > 0, true, 'en los resultados de búsqueda también')
+    // la ayuda lo explica
+    assert.ok((await page.evaluate(() => document.getElementById('help').textContent)).includes('desde cuándo la conoce'), 'la ayuda explica la etiqueta')
+    await ctx.close()
+  })
+
   it('la ayuda explica todas las etiquetas del panel y los botones ? llevan a su sección', async () => {
     const { ctx, page } = await openPanel()
     await page.click('#help-btn')

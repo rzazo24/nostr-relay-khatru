@@ -139,6 +139,13 @@ Never name a local variable `t` in `admin.js`/`nip46.js` (it shadows the transla
 **Hover is mouse-only**: every `:hover` rule that changes colours/borders (panel `admin.css`, `landing.css`) lives inside `@media (hover:hover)`; on touch
 screens hover sticks after a tap, so a tapped button ("Actualizar") stayed green. The mobile panel test taps `#refresh` and asserts its border is unchanged.
 Keep new hover styles inside that media query.
+**New keys** (`internal/moderation/firstseen.go`, `internal/policies/newkeys.go`): the relay records *when it first saw each pubkey* (receive time, table
+`key_first_seen`, only for events that get stored — ephemerals are skipped on purpose; backfilled at startup from the oldest stored event). The policy is **last** in the
+`RejectEvent` chain so rejected junk creates no rows. `RELAY_NEW_KEY_HOURS` (0 = off) additionally refuses `RELAY_NEW_KEY_KINDS` (default 1,6,16,30023) from keys younger
+than that; the owner and the author allowlist are exempt and profile/lists/reactions/deletions always pass. The panel's «nueva» badge comes from `Panel.markNewKeys`
+(computed *after* the 10 s `eventStats` cache, on a copy — the cache is shared) and from the search handler. Go tests: `TestNewKeys_*`, policy and store unit tests;
+panel test «cuentas nuevas…». (`go test -race` flags a race inside go-nostr's client `Relay.Close` used by the test helpers — it predates this and is not in server code.)
+
 **Public stats**: `GET /stats.json` (`internal/admin/publicstats.go`, mounted by `Panel.Mount`, cached 30 s) feeds the landing page's *Activity* section (`landing.js`
 `renderStats`, `#activity`, hidden if the fetch fails). It is deliberately unauthenticated, so it may only carry aggregates: no pubkeys, IPs, content, rejection reasons
 or private kinds (the Go test `TestPublicStats` greps the raw body for all of those). The panel opens its read-only DB connection even without `RELAY_PUBKEY` because this

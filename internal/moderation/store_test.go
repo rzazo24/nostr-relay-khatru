@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func open(t *testing.T) (*Store, string) {
@@ -113,5 +114,64 @@ func TestRemovalsDoNotSideEffectOtherLists(t *testing.T) {
 	s.DeleteSetting("name")
 	if _, ok := s.Setting("name"); ok {
 		t.Fatal("el ajuste debería haberse borrado")
+	}
+}
+
+func TestFirstSeen_RecordsOncePersistsAndBackfills(t *testing.T) {
+	path := t.TempDir() + "/m.sqlite"
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0)
+	if _, ok := s.FirstSeen("aa"); ok {
+		t.Fatal("una clave desconocida no tiene primera vez")
+	}
+	first, isNew := s.SeeKey("aa", now)
+	if !isNew || first != now.Unix() {
+		t.Fatalf("la primera vez se anota con la hora de ahora: %d %v", first, isNew)
+	}
+	first, isNew = s.SeeKey("aa", now.Add(time.Hour))
+	if isNew || first != now.Unix() {
+		t.Fatalf("la segunda vez devuelve la misma: %d %v", first, isNew)
+	}
+	s.Close()
+
+	// sobrevive a un reinicio
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if got, ok := s.FirstSeen("aa"); !ok || got != now.Unix() {
+		t.Fatalf("tras reabrir: %d %v", got, ok)
+	}
+
+	// relleno desde los eventos ya guardados: fecha del más antiguo, sin pasar de ahora, y sin pisar lo que ya consta
+	if _, err := s.db.Exec(`CREATE TABLE event (id TEXT, pubkey TEXT, created_at INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range [][]any{{"1", "aa", now.Unix() - 99999}, {"2", "bb", now.Unix() - 5000}, {"3", "bb", now.Unix() - 100}, {"4", "cc", now.Unix() + 100000}} {
+		if _, err := s.db.Exec(`INSERT INTO event VALUES (?, ?, ?)`, r...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := s.BackfillFirstSeen(now); n != 2 {
+		t.Fatalf("se añaden las claves que no constaban (bb y cc): %d", n)
+	}
+	if got, _ := s.FirstSeen("aa"); got != now.Unix() {
+		t.Fatal("lo que ya constaba no se toca")
+	}
+	if got, _ := s.FirstSeen("bb"); got != now.Unix()-5000 {
+		t.Fatalf("bb: la fecha de su evento más antiguo: %d", got)
+	}
+	if got, _ := s.FirstSeen("cc"); got != now.Unix() {
+		t.Fatalf("cc tiene un evento fechado en el futuro: se queda en ahora: %d", got)
+	}
+	if n := s.BackfillFirstSeen(now); n != 0 {
+		t.Fatalf("repetirlo no añade nada: %d", n)
+	}
+	if s.CountKnownKeys() != 3 {
+		t.Fatal("tres claves conocidas")
 	}
 }

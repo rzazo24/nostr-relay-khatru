@@ -83,6 +83,11 @@ func New(cfg config.Config, version string) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("no se pudo abrir la moderación en %q: %w", cfg.DBPath, err)
 	}
+	// Las claves que ya tienen eventos guardados reciben una primera vez aproximada (la de su evento más antiguo): así la insignia «nueva»
+	// del panel no marca como nuevas a las de siempre cuando se estrena la función.
+	if n := store.BackfillFirstSeen(time.Now()); n > 0 {
+		fmt.Fprintf(LogOutput, "first-seen backfill keys=%d\n", n)
+	}
 
 	statsStore, err := stats.Open(cfg.DBPath)
 	if err != nil {
@@ -141,6 +146,8 @@ func New(cfg config.Config, version string) (*Server, error) {
 			AllowedKinds:     cfg.AllowedKinds,
 		}, time.Now)),
 		s.logEvent(policies.NewPoW(cfg.MinPoW)),
+		// la última: anota cuándo se ve cada clave y, si está activado, aplaza las notas de las claves nuevas
+		s.logEvent(policies.NewNewKeys(store, policies.NewKeyOptions{Hours: cfg.NewKeyHours, Kinds: kindSet(cfg.NewKeyKinds), Owner: cfg.PubKey}, time.Now)),
 	)
 	relay.RejectFilter = append(relay.RejectFilter,
 		s.logFilter(khatrupolicies.FilterIPRateLimiter(cfg.ReqsPerMinute, time.Minute, cfg.ReqsBurst)),
@@ -198,6 +205,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		Stats:        statsStore,
 		Connections:  s.conns.Load,
 		Config:       s.panelConfig(),
+		NewKeyHours:  cfg.NewKeyHours,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("no se pudo preparar el panel de control: %w", err)
@@ -238,6 +246,8 @@ func (s *Server) panelConfig() map[string]any {
 		"reqsBurst":           c.ReqsBurst,
 		"connsPerMinute":      c.ConnsPerMinute,
 		"connsBurst":          c.ConnsBurst,
+		"newKeyHours":         c.NewKeyHours,
+		"newKeyKinds":         c.NewKeyKinds,
 	}
 }
 
@@ -600,4 +610,13 @@ func (s *Server) dbBytes() int64 {
 		}
 	}
 	return total
+}
+
+// kindSet convierte una lista de kinds en un conjunto para consultarlo en cada evento.
+func kindSet(kinds []int) map[int]bool {
+	m := make(map[int]bool, len(kinds))
+	for _, k := range kinds {
+		m[k] = true
+	}
+	return m
 }

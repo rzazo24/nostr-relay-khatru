@@ -6,6 +6,9 @@ window.PANEL_EN = {
   html: {
     "5c679508": "<b>Language</b>: the <b>EN</b> / <b>ES</b> buttons at the top switch the panel between English and Spanish, help included. It is remembered in that browser; the first time the browser's language decides.", /* Idioma: los botones EN / ES de arriba cambian el panel entre inglés y español... */
     "1fc93583": "Each event type has its own <b>colour badge</b> (the number and the name) and the card border in the same colour: <b>notes</b> in teal, <b>reactions</b> in pink, <b>profiles and lists</b> in blue, <b>private messages</b> in violet, <b>app data</b> in lime green, <b>ephemeral</b> in light blue, <b>authentication</b> in orange, <b>deletions and reports</b> in red and <b>zaps</b> in yellow. The same badges appear in “Rejections” and in “Noisiest keys”.", /* Cada tipo de evento lleva su insignia de color… */
+    "e57246c0": "The <b>new</b> label marks a key the relay first saw less than 24 hours ago (or within the trial period, if that is longer): a hint for judging what a freshly created account publishes. Nostr has no “account age”; this is only since when <b>this</b> relay has known it.", /* La etiqueta nueva marca una clave… */
+    "b24bb80d": "New keys", /* Claves nuevas */
+    "ae3fa4b8": "Trial period for keys the relay sees for the first time (<code>RELAY_NEW_KEY_HOURS</code>): during those hours they cannot publish notes, although their profile, lists and reactions are accepted. “no restriction” = off. The owner and the allowlist are exempt.", /* Periodo de prueba de las claves… */
     "4b13e002": "Relay panel", /* Panel del relé */
     "179a5a16": "Loading…", /* Cargando… */
     "530cc80d": "Help", /* Ayuda */
@@ -310,6 +313,11 @@ window.PANEL_EN = {
     "11b386e5": "The amount allowed at once before the rate limit starts to act.", /* Cantidad que se permite de golpe antes de que empiece a actu */
   },
   ui: {
+    "nueva": "new",
+    "El relé vio esta clave por primera vez hace poco": "The relay first saw this key a short while ago",
+    "{n} h sin notas": "{n} h without notes",
+    "sin restricción": "no restriction",
+    "Claves nuevas": "New keys",
     "hace {n} s": "{n} s ago",
     "hace {n} min": "{n} min ago",
     "hace {n} h": "{n} h ago",

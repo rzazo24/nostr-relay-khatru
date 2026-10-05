@@ -38,6 +38,8 @@ type Store struct {
 	mu       sync.RWMutex
 	lists    map[string]map[string]string // list -> key -> reason
 	settings map[string]string
+
+	firstSeen map[string]int64 // pubkey -> primera vez que el relé la vio (ver firstseen.go)
 }
 
 // Open abre (o crea) las tablas de moderación en el archivo SQLite `path` y carga
@@ -50,6 +52,7 @@ func Open(path string) (*Store, error) {
 	for _, stmt := range []string{
 		`CREATE TABLE IF NOT EXISTS moderation_entries (list TEXT NOT NULL, key TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', PRIMARY KEY (list, key))`,
 		`CREATE TABLE IF NOT EXISTS moderation_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS key_first_seen (pubkey TEXT PRIMARY KEY, first_seen INTEGER NOT NULL) WITHOUT ROWID`,
 		`CREATE TABLE IF NOT EXISTS moderation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '')`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
@@ -58,7 +61,8 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
-	s := &Store{db: db, lists: map[string]map[string]string{}, settings: map[string]string{}}
+	s := &Store{db: db, lists: map[string]map[string]string{}, settings: map[string]string{}, firstSeen: map[string]int64{}}
+	s.loadFirstSeenLocked()
 	rows, err := db.Query(`SELECT list, key, reason FROM moderation_entries`)
 	if err != nil {
 		db.Close()

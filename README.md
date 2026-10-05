@@ -124,6 +124,7 @@ optional except `RELAY_DOMAIN` when using Docker.
 | `RELAY_MAX_LIMIT` | `500` | Max events per filter |
 | `RELAY_MAX_NEGENTROPY_EVENTS` | `100000` | Max events offered to a NIP-77 sync session |
 | `RELAY_MIN_POW` | `0` | NIP-13 minimum difficulty in bits (`0` = off) |
+| `RELAY_NEW_KEY_HOURS` | `0` | New-key trial period in hours (`0` = off): a key the relay sees for the first time cannot publish `RELAY_NEW_KEY_KINDS` (default `1,6,16,30023`: notes, reposts, long-form) until that many hours after it first appeared. Profile, lists, reactions and deletions always go through; the owner and the author allowlist are exempt. See [New accounts](#new-accounts) |
 | `RELAY_AUTH_REQUIRED` | `false` | Require NIP-42 authentication to read and write |
 | `RELAY_PRIVATE_KINDS` | `4,1059` | Kinds only their author/recipient can read (`none` = off) |
 | `RELAY_EVENTS_PER_MINUTE` / `_BURST` | `30` / `60` | Events per IP |
@@ -158,6 +159,13 @@ An invalid value stops the relay at startup with an error naming the variable.
 - **Login**: sign a NIP-98 request with the key in `RELAY_PUBKEY` using a NIP-07 browser extension (nos2x, Alby…). The server checks the signature (owner, this exact URL and method, less than a minute old, never reused) and exchanges it for a one-hour session in an `HttpOnly`, `SameSite=Strict`, `Secure` cookie. Login attempts are rate-limited. Without `RELAY_PUBKEY` the panel is disabled.
 - **Privacy**: it never shows IP addresses, and it never shows the content of private messages (kinds 4, 13, 14, 1059). Rejections show only the first 8 characters of the pubkey. Activity history is kept in memory only (lost on restart).
 - **Safety**: the page has a strict Content-Security-Policy (no inline script or style) and puts everything it receives into the page as text, never as HTML.
+
+## New accounts
+
+Nostr has no "account age": a key generated a second ago and one used for years look the same, and any event can be back-dated. All a relay can really know is **since when it has seen a key**. The relay records that (the time it *received* the first event that gets stored — never the event's own `created_at`, and never ephemeral events, so floods of throw-away keys do not fill the table). Keys that already had events when the feature was introduced get an approximate date from their oldest stored event.
+
+- **Panel badge.** Events from a key first seen less than 24 hours ago carry a **new** label in *Recent events* and in search results — a hint when judging what a freshly created account publishes. The owner never gets it.
+- **Optional trial period** (`RELAY_NEW_KEY_HOURS`, off by default). For that many hours after a key first appears, its notes/reposts/long-form posts (`RELAY_NEW_KEY_KINDS`) are refused with a clear `restricted:` message saying roughly how long to wait; its profile, lists, reactions and deletions are accepted, so a new account can still set itself up. The owner and the author allowlist are exempt. It is a speed bump, not a wall: someone who creates keys in advance simply waits, and honest newcomers are delayed too — so it is meant to be switched on only if drive-by posts from brand-new keys become a real problem. Stronger options (proof of work with `RELAY_MIN_POW`, an author allowlist through NIP-86) are described above.
 
 ## Long-term statistics
 

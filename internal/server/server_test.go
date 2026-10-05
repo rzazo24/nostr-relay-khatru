@@ -1792,3 +1792,109 @@ func TestPublicStats_WorkWithoutAnOwner(t *testing.T) {
 		t.Fatalf("%d %s", res.StatusCode, raw)
 	}
 }
+
+// ---------- claves nuevas (RELAY_NEW_KEY_HOURS) ----------
+
+func TestNewKeys_ProbationEndToEnd(t *testing.T) {
+	owner, newbie := newKeys(), newKeys()
+	srv, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_NEW_KEY_HOURS": "24"})
+	r := connect(t, ts)
+
+	// una clave que el relé ve por primera vez no puede publicar notas todavía...
+	err := publish(r, newbie.event(1, "mi primera nota", nil))
+	if err == nil || !strings.Contains(err.Error(), "restricted:") || !strings.Contains(err.Error(), "24 hour") {
+		t.Fatalf("la nota de una clave nueva se aplaza con un motivo claro: %v", err)
+	}
+	// ...pero sí darse de alta: perfil, reacciones, listas y borrados
+	for _, ev := range []nostr.Event{
+		newbie.event(0, `{"name":"nueva"}`, nil),
+		newbie.event(7, "+", nostr.Tags{{"e", strings.Repeat("a", 64)}}),
+		newbie.event(10002, "", nostr.Tags{{"r", "wss://relay.example.com"}}),
+	} {
+		if err := publish(r, ev); err != nil {
+			t.Fatalf("kind %d de una clave nueva debe aceptarse: %v", ev.Kind, err)
+		}
+	}
+	// seguir intentándolo no la «envejece» antes de tiempo
+	if err := publish(r, newbie.event(1, "otra nota", nil)); err == nil {
+		t.Fatal("sigue en periodo de prueba")
+	}
+	// el dueño nunca queda en prueba
+	if err := publish(r, owner.event(1, "nota del dueño", nil)); err != nil {
+		t.Fatalf("el dueño queda exento: %v", err)
+	}
+
+	// el panel marca como «nueva» la clave y no al dueño
+	cookie := adminLogin(t, ts, owner)
+	_, body := adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+	flags := map[string]bool{}
+	for _, e := range body["events"].(map[string]any)["recent"].([]any) {
+		ev := e.(map[string]any)
+		flags[ev["pubkey"].(string)] = ev["newKey"].(bool)
+	}
+	if !flags[newbie.pk] || flags[owner.pk] {
+		t.Fatalf("insignia «nueva»: %v", flags)
+	}
+	_, sb := adminCall(t, ts, "GET", "/admin/api/search?q="+newbie.pk, "", cookie)
+	for _, e := range sb["events"].([]any) {
+		if !e.(map[string]any)["newKey"].(bool) {
+			t.Fatalf("en la búsqueda también: %v", e)
+		}
+	}
+	if cfg := body["config"].(map[string]any); cfg["newKeyHours"] != float64(24) {
+		t.Fatalf("la configuración muestra el periodo: %v", cfg["newKeyHours"])
+	}
+
+	// cumplido el plazo, publica; y deja de constar como nueva pasadas 24 h (el periodo de prueba es de 24 h)
+	srv.Store.SetFirstSeen(newbie.pk, time.Now().Add(-25*time.Hour).Unix())
+	if err := publish(r, newbie.event(1, "ya puedo", nil)); err != nil {
+		t.Fatalf("pasadas 24 h puede publicar notas: %v", err)
+	}
+	_, body = adminCall(t, ts, "GET", "/admin/api/stats", "", cookie)
+	for _, e := range body["events"].(map[string]any)["recent"].([]any) {
+		if ev := e.(map[string]any); ev["pubkey"] == newbie.pk && ev["newKey"].(bool) {
+			t.Fatalf("pasadas 25 h ya no es «nueva»: %v", ev)
+		}
+	}
+}
+
+func TestNewKeys_OffByDefault_StillRecordsStoredKeysOnly(t *testing.T) {
+	newbie, flood := newKeys(), newKeys()
+	srv, ts := start(t, nil) // sin RELAY_NEW_KEY_HOURS
+	r := connect(t, ts)
+	if err := publish(r, newbie.event(1, "hola", nil)); err != nil {
+		t.Fatalf("por defecto no se aplaza nada: %v", err)
+	}
+	if err := publish(r, flood.event(20001, "efímero", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := srv.Store.FirstSeen(newbie.pk); !ok {
+		t.Fatal("la clave que publica algo que se guarda consta, aunque la función esté apagada (alimenta la insignia)")
+	}
+	if _, ok := srv.Store.FirstSeen(flood.pk); ok {
+		t.Fatal("las claves que solo mandan efímeros no se anotan")
+	}
+}
+
+func TestNewKeys_BackfillOnStartup(t *testing.T) {
+	old := newKeys()
+	path := filepath.Join(t.TempDir(), "relay.sqlite")
+	env := map[string]string{"RELAY_DB_PATH": path}
+	srv, ts := start(t, env)
+	r := connect(t, ts)
+	ev := old.event(1, "de hace tiempo", nil)
+	ev.CreatedAt = nostr.Now() - 40*3600
+	ev.Sign(old.sk)
+	if err := publish(r, ev); err != nil {
+		t.Fatal(err)
+	}
+	// «borra» lo anotado para simular una base de datos de antes de la función, y reabre
+	srv.Store.ForgetAllKeysForTest()
+	srv.Close()
+	ts.Close()
+	srv2, _ := start(t, env)
+	first, ok := srv2.Store.FirstSeen(old.pk)
+	if !ok || time.Since(time.Unix(first, 0)) < 39*time.Hour {
+		t.Fatalf("al arrancar se rellena con la fecha de su evento más antiguo: %d %v", first, ok)
+	}
+}

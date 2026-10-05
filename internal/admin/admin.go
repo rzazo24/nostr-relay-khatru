@@ -80,6 +80,8 @@ type Moderation interface {
 	CountBlockedIPs() int
 	AllowedKinds() []int
 	DisallowedKinds() []int
+	// FirstSeen dice cuándo (unix) vio el relé por primera vez una clave (para la insignia «nueva» de los eventos).
+	FirstSeen(pubkey string) (int64, bool)
 }
 
 // Options agrupa lo que necesita el panel.
@@ -99,6 +101,7 @@ type Options struct {
 	InfoDefaults InfoView                    // los de la configuración (a los que vuelve "restaurar")
 	Log          func(action, target string) // deja constancia (sin contenido ni IPs) de cada acción
 	Connections  func() int64
+	NewKeyHours  int            // RELAY_NEW_KEY_HOURS: la insignia «nueva» dura al menos 24 h, o este periodo si es más largo
 	Config       map[string]any // límites y NIPs, tal cual se muestran (solo lectura)
 	Now          func() time.Time
 }
@@ -389,6 +392,7 @@ type recentEvent struct {
 	CreatedAt int64  `json:"createdAt"`
 	Content   string `json:"content,omitempty"`
 	Mine      bool   `json:"mine"`
+	NewKey    bool   `json:"newKey"` // el relé vio esta clave por primera vez hace poco (ver newKeyBadge)
 }
 
 type dayCount struct {
@@ -519,6 +523,7 @@ func (p *Panel) stats(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "could not read the statistics")
 		return
 	}
+	ev = p.markNewKeys(ev, now)
 	var conns int64
 	if p.o.Connections != nil {
 		conns = p.o.Connections()
@@ -576,4 +581,30 @@ func markMine(keys []NoisyKey, owner string) []NoisyKey {
 		keys[i].Mine = keys[i].Pubkey == owner
 	}
 	return keys
+}
+
+// newKeyBadge es cuánto tiempo se considera «nueva» una clave en el panel: 24 h como mínimo, o el periodo de prueba si es más largo.
+func (p *Panel) newKeyBadge() time.Duration {
+	return max(24*time.Hour, time.Duration(p.o.NewKeyHours)*time.Hour)
+}
+
+// isNewKey dice si el relé vio esta clave por primera vez hace menos de newKeyBadge. El dueño nunca consta como nueva.
+func (p *Panel) isNewKey(pubkey string, now time.Time) bool {
+	if pubkey == p.o.Owner || p.o.Moderation == nil {
+		return false
+	}
+	first, ok := p.o.Moderation.FirstSeen(pubkey)
+	return ok && now.Sub(time.Unix(first, 0)) < p.newKeyBadge()
+}
+
+// markNewKeys devuelve una copia de las estadísticas con la insignia «nueva» puesta en los eventos recientes. Se calcula aquí y no dentro
+// de la caché de eventStats porque depende de la hora y de lo que el relé vaya viendo; y sobre una copia, porque la caché se comparte.
+func (p *Panel) markNewKeys(ev *eventStats, now time.Time) *eventStats {
+	cp := *ev
+	cp.Recent = make([]recentEvent, len(ev.Recent))
+	for i, e := range ev.Recent {
+		e.NewKey = p.isNewKey(e.PubKey, now)
+		cp.Recent[i] = e
+	}
+	return &cp
 }

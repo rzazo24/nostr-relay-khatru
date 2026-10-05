@@ -332,6 +332,7 @@
         <ul>
           <li>Los <b>mensajes privados</b> no muestran contenido: el relé ni siquiera se lo manda al panel.</li>
           <li>La etiqueta <b>tuyo</b> marca lo publicado con tu clave de dueño.</li>
+          <li>La etiqueta <b>nueva</b> marca una clave que el relé vio por primera vez hace menos de 24 horas (o del periodo de prueba, si es más largo): una pista para juzgar lo que publica una cuenta recién creada. Nostr no tiene «edad de cuenta»; esto es solo desde cuándo la conoce <b>este</b> relé.</li>
           <li>Pulsa la clave (en turquesa) para <b>copiarla entera</b>.</li>
           <li>Cada tipo de evento lleva su <b>insignia de color</b> (el número y el nombre) y el borde de la tarjeta del mismo color: <b>notas</b> en turquesa, <b>reacciones</b> en rosa, <b>perfiles y listas</b> en azul, <b>mensajes privados</b> en violeta, <b>datos de app</b> en verde lima, <b>efímeros</b> en azul claro, <b>autenticación</b> en naranja, <b>borrados y denuncias</b> en rojo y <b>zaps</b> en amarillo. Las mismas insignias salen en «Rechazos» y en «Claves más ruidosas».</li>
           <li><b>Vetar evento</b> borra ese evento y no deja que vuelva a publicarse. <b>Banear clave</b> impide que esa clave publique; la página pregunta si además quieres borrar todo lo suyo. Ambas se pueden deshacer desde «Moderación».</li>
@@ -394,6 +395,7 @@
           <dt>Sync NIP-77 máx.</dt><dd>Máximo de eventos que se ofrecen en una sincronización con otro relé o cliente.</dd>
           <dt>Fecha futura máx.</dt><dd>Cuánto puede adelantarse la fecha de un evento respecto al reloj del relé.</dd>
           <dt>Prueba de trabajo</dt><dd>Un esfuerzo de cálculo que se exige al publicar, como antispam. «no» = desactivada.</dd>
+          <dt>Claves nuevas</dt><dd>Periodo de prueba de las claves que el relé ve por primera vez (<code>RELAY_NEW_KEY_HOURS</code>): durante esas horas no pueden publicar notas, aunque sí su perfil, listas y reacciones. «sin restricción» = desactivado. El dueño y la lista blanca quedan exentos.</dd>
           <dt>Auth obligatoria</dt><dd>Si hace falta autenticarse para leer y escribir. «no» = solo para mensajes privados.</dd>
           <dt>Tipos privados</dt><dd>Tipos de evento que solo ven su autor y su destinatario (mensajes directos).</dd>
           <dt>Eventos/min por IP · Consultas/min por IP · Conexiones/min por IP</dt><dd>Límites de velocidad por dirección IP. El primer número son los permitidos por minuto; «ráfaga» es cuántos caben de golpe antes de empezar a frenar.</dd>

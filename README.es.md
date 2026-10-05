@@ -122,6 +122,7 @@ opcionales salvo `RELAY_DOMAIN` con Docker.
 | `RELAY_MAX_LIMIT` | `500` | Máximo de eventos por filtro |
 | `RELAY_MAX_NEGENTROPY_EVENTS` | `100000` | Máximo de eventos que ofrece una sesión NIP-77 |
 | `RELAY_MIN_POW` | `0` | Dificultad mínima NIP-13 en bits (`0` = desactivado) |
+| `RELAY_NEW_KEY_HOURS` | `0` | Periodo de prueba de claves nuevas en horas (`0` = desactivado): una clave que el relé ve por primera vez no puede publicar `RELAY_NEW_KEY_KINDS` (por defecto `1,6,16,30023`: notas, reposts, artículos) hasta que pasen esas horas desde que apareció. El perfil, las listas, las reacciones y los borrados siempre pasan; el dueño y la lista blanca de autores quedan exentos. Ver [Cuentas nuevas](#cuentas-nuevas) |
 | `RELAY_AUTH_REQUIRED` | `false` | Exigir autenticación NIP-42 para leer y escribir |
 | `RELAY_PRIVATE_KINDS` | `4,1059` | Kinds que solo ven su autor y su destinatario (`none` = desactivado) |
 | `RELAY_EVENTS_PER_MINUTE` / `_BURST` | `30` / `60` | Eventos por IP |
@@ -156,6 +157,13 @@ Un valor inválido detiene el relé al arrancar con un error que nombra la varia
 - **Entrada**: firmas una petición NIP-98 con la clave de `RELAY_PUBKEY` usando una extensión NIP-07 del navegador (nos2x, Alby…). El servidor comprueba la firma (dueño, esta URL y método exactos, de menos de un minuto y sin haberse usado antes) y la cambia por una sesión de una hora en una cookie `HttpOnly`, `SameSite=Strict` y `Secure`. Los intentos de entrada tienen límite de velocidad. Sin `RELAY_PUBKEY` el panel está desactivado.
 - **Privacidad**: nunca muestra direcciones IP ni el contenido de los mensajes privados (kinds 4, 13, 14, 1059). Los rechazos solo llevan los 8 primeros caracteres del pubkey. El histórico de actividad está solo en memoria (se pierde al reiniciar).
 - **Seguridad**: la página tiene una política de contenido estricta (sin script ni estilo en línea) y pone todo lo que recibe como texto, nunca como HTML.
+
+## Cuentas nuevas
+
+Nostr no tiene «edad de cuenta»: una clave generada hace un segundo y una usada durante años son iguales, y cualquier evento se puede fechar a mano. Lo único que un relé sabe de verdad es **desde cuándo ha visto una clave**. El relé lo anota (la hora a la que *recibió* el primer evento que se guarda, nunca el `created_at` del propio evento, y nunca los efímeros, para que una inundación de claves de usar y tirar no llene la tabla). A las claves que ya tenían eventos cuando se estrenó la función se les da una fecha aproximada, la de su evento guardado más antiguo.
+
+- **Insignia en el panel.** Los eventos de una clave vista por primera vez hace menos de 24 horas llevan la etiqueta **nueva** en *Eventos recientes* y en los resultados de búsqueda: una pista para juzgar lo que publica una cuenta recién creada. El dueño nunca la lleva.
+- **Periodo de prueba opcional** (`RELAY_NEW_KEY_HOURS`, desactivado por defecto). Durante esas horas desde que aparece una clave, sus notas, reposts y artículos (`RELAY_NEW_KEY_KINDS`) se rechazan con un mensaje `restricted:` claro que dice más o menos cuánto esperar; su perfil, listas, reacciones y borrados se aceptan, así que una cuenta nueva puede darse de alta. El dueño y la lista blanca de autores quedan exentos. Es un freno, no un muro: quien crea claves por adelantado solo tiene que esperar, y los recién llegados de verdad también se retrasan; por eso está pensado para activarlo solo si los mensajes de paso de claves nuevas llegan a ser un problema real. Opciones más fuertes (prueba de trabajo con `RELAY_MIN_POW`, lista blanca de autores con NIP-86) están descritas más arriba.
 
 ## Estadísticas de largo plazo
 

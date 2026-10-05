@@ -48,6 +48,11 @@ type Config struct {
 	// NIP-13: dificultad mínima de prueba de trabajo (bits a cero del id). 0 = desactivado.
 	MinPoW int
 
+	// Claves nuevas (ver internal/policies/newkeys.go): durante NewKeyHours horas desde que el relé ve una clave por primera vez, sus
+	// eventos de NewKeyKinds se aplazan. 0 = desactivado (solo se anota cuándo se ve cada clave, para la insignia «nueva» del panel).
+	NewKeyHours int
+	NewKeyKinds []int
+
 	// NIP-42: AuthRequired exige autenticarse para leer y escribir. PrivateKinds son
 	// los kinds cuyo contenido solo ven su autor y el destinatario (tag p), siempre
 	// autenticado (por defecto los mensajes directos: 4 y 1059).
@@ -129,6 +134,25 @@ func Load(get func(string) string) (Config, error) {
 			return c, fmt.Errorf("RELAY_MIN_POW: %q no es un entero entre 0 y 64 (0 = desactivado)", v)
 		}
 		c.MinPoW = n
+	}
+
+	if v := strings.TrimSpace(get("RELAY_NEW_KEY_HOURS")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 8760 {
+			return c, fmt.Errorf("RELAY_NEW_KEY_HOURS: %q no es un entero entre 0 y 8760 (0 = desactivado)", v)
+		}
+		c.NewKeyHours = n
+	}
+	c.NewKeyKinds = []int{1, 6, 16, 30023} // notas, reposts y artículos
+	if v := strings.TrimSpace(get("RELAY_NEW_KEY_KINDS")); v != "" {
+		c.NewKeyKinds = nil
+		for _, part := range strings.Split(v, ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil || n < 0 {
+				return c, fmt.Errorf("RELAY_NEW_KEY_KINDS: %q no es una lista de kinds separados por comas", v)
+			}
+			c.NewKeyKinds = append(c.NewKeyKinds, n)
+		}
 	}
 
 	if v := strings.TrimSpace(get("RELAY_AUTH_REQUIRED")); v != "" {

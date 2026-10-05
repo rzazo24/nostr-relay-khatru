@@ -116,6 +116,7 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .keycard .top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; }
 .keycard .name { font-weight:700; } .keycard .kinds { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0; }
 .badge.warn { border-color:var(--red); color:#ff8a9b; }
+.badge.new { border-color:#fbbf24; color:#fbbf24; }
 .resultinfo { margin:10px 0 4px; color:var(--muted); font-size:.9rem; }
 button.chipbtn { padding:1px 8px; border-radius:999px; font-size:.8rem; }
 td .pk { cursor:pointer; }

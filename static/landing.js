@@ -192,10 +192,9 @@ function render() {
   // una sola etiqueta «Contacto» con el npub del relé y lo que haya en el campo contact (aquí, la dirección Lightning)
   const parts = []
   const npub = info.pubkey ? toNpub(info.pubkey) : null
-  if (npub) parts.push(`${npub.slice(0, 12)}…${npub.slice(-6)}`)
+  if (npub) parts.push(npub)
   if (info.contact) parts.push(info.contact)
   $('operator').textContent = parts.length ? `${t('contact')}: ${parts.join(' · ')}` : ''
-  $('operator').title = npub || ''
   // "dev" es la versión de una compilación sin etiquetar: no aporta nada al visitante
   if (info.version && info.version !== 'dev') $('version').textContent = ' · ' + info.version
 }

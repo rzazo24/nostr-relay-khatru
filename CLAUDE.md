@@ -181,6 +181,12 @@ channel internally, so a query function must never return a nil channel (it dead
 the content-length limit must stay above that (tests use 800). Untested with a real Clave (first attempt failed with "no relay specified" when the URI had only our relay,
 with a trailing slash).
 
+**Bunker login** (`loginBunker` in `admin.js`, `parseBunker` + `createSession({ bunker })` in `nip46.js`): paste a `bunker://` address (a password input, cleared after use, never stored);
+the page presents itself with `connect [signerPk, secret]`, waits for `ack`, then asks for the same NIP-98 login event. Only the address's relays that are already allowed (this relay + `data-extra-relays`) are
+used, so the CSP needs no change. The signer here is `~/proyectos/hivescope-bunker` (separate repo): its `panel` connection is created with `--url https://relay.hivescope.xyz/admin/api/login` and refuses to sign any
+other address. **Static files are served live from `./static` (directory mount): an edit under `static/` is in production the moment it is saved**, before any commit. The relay allows 5 sessions and drops the
+oldest, so a panel test that logs in for real must log out again or it evicts the cookie other tests reuse.
+
 **Backup download** (`GET /admin/api/backup`, `admin/backup.go`): `VACUUM INTO <tmp next to the DB>` over its *own* `mode=ro` connection
 (the panel's `_query_only` connection can't run VACUUM INTO), gzipped on the fly, tmp deleted after; one at a time (`backupBusy`, 429 otherwise),
 refuses `Sec-Fetch-Site: cross-site`, logged as action `backup`. Frontend fetches it into a Blob (fine under the strict CSP) — fine for DBs up to a

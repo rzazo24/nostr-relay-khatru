@@ -141,6 +141,38 @@ async function loginRemote() {
   }
 }
 
+/** Entrar con la dirección `bunker://` de un bunker propio (HiveScope Bunker): se pega, se presenta y firma el inicio de sesión. */
+async function loginBunker() {
+  const input = $('bunker-input'), msg = $('bunker-msg')
+  const say = (text, err) => { msg.className = err ? 'msg err' : 'msg'; msg.textContent = text }
+  const text = input.value.trim()
+  if (!text) { say(t('Pega primero la dirección bunker://'), true); return }
+  remoteReset()
+  $('bunker-btn').disabled = true
+  say(t('Conectando con el bunker…'))
+  let session
+  try {
+    const { createSession, parseBunker } = await import('/admin/nip46.js')
+    session = remote = createSession({
+      bunker: parseBunker(text),
+      extraRelays: ($('login').dataset.extraRelays || '').split(',').map((r) => r.trim()).filter(Boolean),
+      onStatus: (s) => { if (remote === session || !session) $('bunker-diag').textContent = `${new Date().toLocaleTimeString(I18N.lang === 'en' ? 'en-GB' : 'es-ES')} · ${s}` },
+    })
+    await session.connectBunker()
+    say(t('Conectado. Firmando el inicio de sesión…'))
+    const signed = JSON.parse(await session.request('sign_event', [JSON.stringify(loginTemplate())]))
+    if (!signed || signed.kind !== 27235 || typeof signed.sig !== 'string') throw new Error(t('el firmador devolvió algo que no es la firma pedida'))
+    await sendLogin(signed)
+    input.value = '' // la dirección es una contraseña: no se queda en la página
+    say('')
+    remoteReset()
+    start()
+  } catch (err) {
+    if (remote === session) remoteReset()
+    say(t('No se pudo entrar: {e}', { e: err.message || err }), true)
+  } finally { $('bunker-btn').disabled = false }
+}
+
 async function login() {
   const msg = $('login-msg')
   msg.className = 'msg'
@@ -778,9 +810,10 @@ document.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('clic
 
 // ---------- arranque ----------
 
-if (!window.nostr) $('remote-login').open = true // sin extensión (un móvil), lo normal es entrar con un firmador remoto
+if (!window.nostr) { $('remote-login').open = true; $('bunker-login').open = true } // sin extensión (un móvil), lo normal es entrar con un firmador remoto
 $('login-btn').addEventListener('click', login)
 $('remote-btn').addEventListener('click', loginRemote)
+$('bunker-btn').addEventListener('click', loginBunker)
 $('remote-cancel').addEventListener('click', () => { remoteReset(); $('login-msg').textContent = '' })
 $('remote-copy').addEventListener('click', () => {
   const href = $('remote-link').dataset.uri

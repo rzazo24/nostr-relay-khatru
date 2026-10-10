@@ -35,6 +35,14 @@
       <button type="button" id="login-btn" class="primary">Entrar con Nostr</button>
       <p id="login-msg" class="msg" role="status"></p>
 
+      <details id="bunker-login" class="remote">
+        <summary>Entrar con una dirección de mi bunker propio (bunker://…)</summary>
+        <p class="muted small">Si tienes <b>HiveScope Bunker</b> en tu servidor: crea una conexión con <code>hivescope-bunker add panel panel --url https://relay.hivescope.xyz/admin/api/login</code> y pega aquí su dirección. Es una contraseña: no se guarda en esta página.</p>
+        <p class="btns"><input type="password" id="bunker-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="bunker://…" aria-label="Dirección bunker"> <button type="button" id="bunker-btn" class="primary">Entrar con el bunker</button></p>
+        <p id="bunker-msg" class="msg" role="status"></p>
+        <p id="bunker-diag" class="muted small" role="status" aria-live="polite"></p>
+      </details>
+
       <details id="remote-login" class="remote">
         <summary>Entrar desde el móvil con un firmador remoto (Clave en el iPhone…)</summary>
         <p class="muted small">Sin extensión en el navegador: la clave se queda en la app firmadora (por ejemplo <b>Clave</b>, que usa el estándar NIP-46) y el panel solo recibe la firma. El intercambio pasa por este relé y por el relé de Clave (<code>relay.powr.build</code>), cifrado de extremo a extremo.</p>

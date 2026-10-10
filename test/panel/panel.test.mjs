@@ -131,6 +131,35 @@ function mockSigner(uri, { userSecret = null, onReplied = () => {}, relayIndex =
   return { seen, close: () => ws.close() }
 }
 
+/** Un bunker NIP-46 de mentira (como HiveScope Bunker): su dirección bunker://, un secreto, y solo firma si el panel se presenta con él. */
+function mockBunker({ userSecret = null, secret = 'bunker-secret-1', relayPaths = ['', '/clave'] } = {}) {
+  const userSk = userSecret ?? stack.ownerSecret
+  const sk = generateSecretKey()
+  const pk = getPublicKey(sk)
+  const host = new URL(stack.panelUrl).host
+  const address = `bunker://${pk}?${relayPaths.map((p) => `relay=${encodeURIComponent('ws://' + host + p)}`).join('&')}&relay=${encodeURIComponent('wss://relay.damus.io')}&secret=${secret}`
+  const ws = new WebSocket(stack.relayWs)
+  const paired = new Set()
+  const seen = { methods: [], ids: new Set() }
+  ws.on('open', () => ws.send(JSON.stringify(['REQ', 'b', { kinds: [24133], '#p': [pk], since: now() - 30 }])))
+  ws.on('message', (raw) => {
+    const m = JSON.parse(raw)
+    if (m[0] !== 'EVENT' || seen.ids.has(m[2].id)) return
+    seen.ids.add(m[2].id)
+    const client = m[2].pubkey
+    const key = nip44.getConversationKey(sk, client)
+    let req
+    try { req = JSON.parse(nip44.decrypt(m[2].content, key)) } catch { return }
+    seen.methods.push(req.method)
+    const reply = (obj) => ws.send(JSON.stringify(['EVENT', finalizeEvent({ kind: 24133, created_at: now(), tags: [['p', client]], content: nip44.encrypt(JSON.stringify(obj), key) }, sk)]))
+    if (req.method === 'connect') { if (req.params[1] === secret) { paired.add(client); reply({ id: req.id, result: 'ack' }) } else reply({ id: req.id, error: 'not authorised' }); return }
+    if (!paired.has(client)) { reply({ id: req.id, error: 'not authorised' }); return }
+    if (req.method === 'sign_event') reply({ id: req.id, result: JSON.stringify(finalizeEvent(JSON.parse(req.params[0]), userSk)) })
+    else reply({ id: req.id, error: 'método no soportado' })
+  })
+  return { address, seen, close: () => ws.close() }
+}
+
 describe('panel de control', () => {
   before(async () => {
     stack = await startStack()
@@ -822,6 +851,42 @@ describe('panel de control', () => {
     assert.deepEqual(signer.seen.methods, ['sign_event'], 'solo se pide firmar el inicio de sesión, nada más')
     await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('Inicio de sesión'), null, { timeout: 8000 })
     signer.close()
+    await ctx.close()
+  })
+
+  it('entrar con la dirección bunker:// de un bunker propio: se presenta con su secreto y firma el inicio de sesión', async () => {
+    const { ctx, page } = await openPanel({ extension: false })
+    assert.equal(await page.evaluate(() => document.getElementById('bunker-login').open), true, 'sin extensión, el apartado del bunker sale abierto')
+    assert.equal(await page.getAttribute('#bunker-input', 'type'), 'password', 'la dirección es una contraseña: no se muestra')
+    const bunker = mockBunker()
+    await page.fill('#bunker-input', bunker.address)
+    await page.click('#bunker-btn')
+    await page.waitForSelector('#dash:not([hidden])', { timeout: 15000 })
+    assert.deepEqual(bunker.seen.methods, ['connect', 'sign_event'], 'se presenta y pide firmar el inicio de sesión, nada más')
+    assert.equal(await page.inputValue('#bunker-input'), '', 'la dirección no se queda en la página')
+    await page.waitForFunction(() => document.querySelector('#audit tbody').textContent.includes('Inicio de sesión'), null, { timeout: 8000 })
+    await page.click('#logout') // el relé guarda como mucho 5 sesiones y descarta la más antigua: esta no debe echar la que reutilizan otras pruebas
+    bunker.close()
+    await ctx.close()
+  })
+
+  it('bunker:// con un secreto equivocado, una dirección que no es, o sin relés utilizables: no entra y lo dice', async () => {
+    const { ctx, page } = await openPanel({ extension: false })
+    const say = async () => { await page.waitForFunction(() => /No se pudo entrar|Pega primero/.test(document.getElementById('bunker-msg').textContent), null, { timeout: 15000 }); return page.innerText('#bunker-msg') }
+    await page.click('#bunker-btn')
+    assert.match(await say(), /Pega primero/)
+    await page.fill('#bunker-input', 'esto no es una dirección')
+    await page.click('#bunker-btn')
+    assert.match(await say(), /No se pudo entrar: .*bunker/)
+    const wrong = mockBunker()
+    await page.fill('#bunker-input', wrong.address.replace('bunker-secret-1', 'otro'))
+    await page.click('#bunker-btn')
+    await page.waitForFunction(() => /not authorised/.test(document.getElementById('bunker-msg').textContent), null, { timeout: 15000 })
+    assert.equal(await page.isVisible('#dash'), false)
+    wrong.close()
+    await page.fill('#bunker-input', `bunker://${'a'.repeat(64)}?relay=${encodeURIComponent('wss://relay.damus.io')}&secret=x`) // ningún relé que el panel pueda usar
+    await page.click('#bunker-btn')
+    await page.waitForFunction(() => /ningún relé que este panel/.test(document.getElementById('bunker-msg').textContent), null, { timeout: 15000 })
     await ctx.close()
   })
 

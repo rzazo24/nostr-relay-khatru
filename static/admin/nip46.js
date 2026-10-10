@@ -16,12 +16,28 @@ const KIND = 24133
 const randomHex = (n) => bytesToHex(crypto.getRandomValues(new Uint8Array(n)))
 const noSlash = (u) => u.replace(/\/+$/, '')
 
-export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', extraRelays = [], onAuthUrl = () => {}, onStatus = () => {} } = {}) {
+/** Lee una dirección `bunker://<clave del firmador>?relay=wss://…&secret=…` (la de un bunker propio). */
+export function parseBunker(text) {
+  let u
+  try { u = new URL(String(text).trim()) } catch { throw new Error(t('eso no es una dirección bunker://')) }
+  const pubkey = (u.hostname || u.pathname.replace(/^\/+/, '')).toLowerCase()
+  if (u.protocol !== 'bunker:' || !/^[0-9a-f]{64}$/.test(pubkey)) throw new Error(t('eso no es una dirección bunker://'))
+  const relays = u.searchParams.getAll('relay').map(noSlash)
+  const secret = u.searchParams.get('secret') || ''
+  if (!relays.length) throw new Error(t('la dirección bunker no trae ningún relé'))
+  return { pubkey, relays, secret }
+}
+
+/** `bunker`: una dirección ya leída con `parseBunker`; en vez de crear un enlace para que lo abra el firmador, el panel se conecta a él.
+ *  Solo se usan de sus relés los que este panel puede usar (este relé y los extra de la página): la política de seguridad no deja más. */
+export function createSession({ name = 'Panel de control del relé', permissions = 'sign_event:27235', extraRelays = [], bunker = null, onAuthUrl = () => {}, onStatus = () => {} } = {}) {
   const clientSk = generateSecretKey()
   const clientPk = getPublicKey(clientSk)
-  const secret = randomHex(16)
+  const secret = bunker ? bunker.secret : randomHex(16)
   const ownRelay = noSlash(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`)
-  const relays = [...new Set([ownRelay, ...extraRelays.map(noSlash)])]
+  const usable = [...new Set([ownRelay, ...extraRelays.map(noSlash)])]
+  const relays = bunker ? usable.filter((r) => bunker.relays.includes(r)) : usable
+  if (bunker && !relays.length) throw new Error(t('la dirección bunker no incluye ningún relé que este panel pueda usar'))
   const startedAt = Math.floor(Date.now() / 1000)
 
   const params = new URLSearchParams()
@@ -31,13 +47,13 @@ export function createSession({ name = 'Panel de control del relé', permissions
   params.set('url', location.origin)
   params.set('callback', `${location.origin}/admin/`)
   params.set('perms', permissions)
-  const uri = `nostrconnect://${clientPk}?${params.toString()}`
+  const uri = bunker ? null : `nostrconnect://${clientPk}?${params.toString()}`
   // Enlace que abre la app Clave en iOS: el enlace universal de Clave (si la app está instalada, iOS la abre; si no, lleva a
   // su página). El `uri` va codificado dentro. (Su esquema propio `clave://connect?uri=` es la alternativa, no se usa.)
-  const claveLink = `https://clave.casa/connect/?uri=${encodeURIComponent(uri)}`
+  const claveLink = bunker ? null : `https://clave.casa/connect/?uri=${encodeURIComponent(uri)}`
 
   let closed = false
-  let signerPk = null
+  let signerPk = bunker ? bunker.pubkey : null
   const seen = new Set()
   const pending = new Map() // id de la petición -> { resolve, reject, timeout }
   let resolveReady, rejectReady
@@ -126,6 +142,13 @@ export function createSession({ name = 'Panel de control del relé', permissions
     /** Se resuelve con la clave del firmador cuando acepta la conexión. */
     waitForSigner(ms = 180000) {
       return Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error(t('no se ha aprobado la conexión a tiempo'))), ms))])
+    },
+    /** Con una dirección bunker: se presenta con su secreto y espera el «ack» (el bunker decide si le deja entrar). */
+    async connectBunker(ms = 30000) {
+      if (!bunker) throw new Error('no es una sesión con dirección bunker')
+      const answer = await this.request('connect', [bunker.pubkey, bunker.secret], ms)
+      if (answer !== 'ack') throw new Error(t('el bunker no ha aceptado la conexión'))
+      return signerPk
     },
     /** Pide algo al firmador y espera su respuesta (el usuario puede tardar en aprobar). Se envía por todos los relés. */
     request(method, args = [], ms = 120000) {

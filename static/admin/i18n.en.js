@@ -4,6 +4,11 @@
 //  · ui:   frases que escribe admin.js / nip46.js con t('…'), por el propio texto en español; {nombre} son huecos.
 window.PANEL_EN = {
   html: {
+    "a09c34ac": "Log in with the address of my own bunker (bunker://…)", /* Entrar con una dirección de mi bunker propio */
+    "ddc97b3a": "If you run <b>HiveScope Bunker</b> on your server: create a connection with <code>hivescope-bunker add panel panel --url https://relay.hivescope.xyz/admin/api/login</code> and paste its address here. It is a password: it is not kept on this page.", /* Si tienes HiveScope Bunker en tu servidor */
+    "bf4f9ba2": "Bunker address", /* Dirección bunker */
+    "c5ea2016": "bunker://…", /* bunker://… */
+    "2a3e7039": "Log in with the bunker", /* Entrar con el bunker */
     "5c679508": "<b>Language</b>: the <b>EN</b> / <b>ES</b> buttons at the top switch the panel between English and Spanish, help included. It is remembered in that browser; the first time the browser's language decides.", /* Idioma: los botones EN / ES de arriba cambian el panel entre inglés y español... */
     "1fc93583": "Each event type has its own <b>colour badge</b> (the number and the name) and the card border in the same colour: <b>notes</b> in teal, <b>reactions</b> in pink, <b>profiles and lists</b> in blue, <b>private messages</b> in violet, <b>app data</b> in lime green, <b>ephemeral</b> in light blue, <b>authentication</b> in orange, <b>deletions and reports</b> in red and <b>zaps</b> in yellow. The same badges appear in “Rejections” and in “Noisiest keys”.", /* Cada tipo de evento lleva su insignia de color… */
     "e57246c0": "The <b>new</b> label marks a key the relay first saw less than 24 hours ago (or within the trial period, if that is longer): a hint for judging what a freshly created account publishes. Nostr has no “account age”; this is only since when <b>this</b> relay has known it.", /* La etiqueta nueva marca una clave… */
@@ -313,6 +318,13 @@ window.PANEL_EN = {
     "11b386e5": "The amount allowed at once before the rate limit starts to act.", /* Cantidad que se permite de golpe antes de que empiece a actu */
   },
   ui: {
+    "eso no es una dirección bunker://": "that is not a bunker:// address",
+    "la dirección bunker no trae ningún relé": "the bunker address has no relay",
+    "la dirección bunker no incluye ningún relé que este panel pueda usar": "the bunker address has no relay this panel can use",
+    "el bunker no ha aceptado la conexión": "the bunker did not accept the connection",
+    "Pega primero la dirección bunker://": "Paste the bunker:// address first",
+    "Conectando con el bunker…": "Connecting to the bunker…",
+    "Conectado. Firmando el inicio de sesión…": "Connected. Signing the login…",
     "nueva": "new",
     "El relé vio esta clave por primera vez hace poco": "The relay first saw this key a short while ago",
     "{n} h sin notas": "{n} h without notes",

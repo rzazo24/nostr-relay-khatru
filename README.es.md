@@ -208,6 +208,7 @@ El script comprueba que el backup se descomprime y pasa el `integrity_check` de 
 - **Backups**: `./scripts/backup-db.sh` hace una copia consistente con `sqlite3 .backup`
   (segura mientras el relé escribe) en `~/backups/nostr-relay-khatru`, conservando 14
   días. Prográmalo tú en cron, por ejemplo `17 3 * * * /ruta/a/scripts/backup-db.sh`.
+- **Firmador en la misma máquina (opcional)**: con `BUNKER_STATUS_CMD` el chequeo avisa también si un hivescope-bunker está parado o bloqueado (tras un reinicio arranca bloqueado), sin reiniciarlo nunca.
 - **Autorrecuperación (opcional)**: `./scripts/healthcheck.sh` reinicia los contenedores
   tras fallos repetidos. No se instala solo; lee antes su cabecera.
 - **Avisos externos (opcional)**: el script también puede avisar a un servicio de monitorización: define `PING_URL` (se llama cada vez que el relé responde; un servicio como healthchecks.io te escribe cuando los avisos *dejan de llegar*, lo que cubre también que caiga el servidor entero) y, si quieres, `PING_FAIL_URL` (se llama cuando hay `ALERT_THRESHOLD` fallos seguidos —2 por defecto, el mismo momento en que reiniciaría— para avisar antes; un tropiezo aislado no manda nada). Un monitor inalcanzable nunca rompe el chequeo. O apunta un monitor HTTP externo (UptimeRobot…) a `https://<RELAY_DOMAIN>/`, que responde 200.

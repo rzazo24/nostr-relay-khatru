@@ -295,7 +295,11 @@ via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, de
 after editing `.env` (env_file is read when the container is created). A daily cron runs
 `scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`); the
 healthcheck script (pings healthchecks.io via `PING_URL`/`PING_FAIL_URL` set in the cron line; `PING_FAIL_URL` only fires after `ALERT_THRESHOLD`=2 consecutive failures so one blip doesn't email — the ping URL is a secret, it lives only in the crontab, never in git) runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
-`~/backups/nostr-relay-khatru/healthcheck.log`, only written on failures/recoveries).
+`~/backups/nostr-relay-khatru/healthcheck.log`, only written on failures/recoveries). With `BUNKER_STATUS_CMD` (the hivescope-bunker `status` command) it also alerts, with the reason in the ping body, when the
+bunker on this machine is stopped or LOCKED (after any restart it starts locked and nothing signs until `hivescope-bunker unlock`); it never
+restarts the bunker. `/etc/needrestart/conf.d/hivescope-bunker.conf` keeps Ubuntu's needrestart from restarting it after an apt run (it did,
+once, because its binary had been replaced while it ran: it came back locked). The nightly backups are also copied off the machine: Syncthing
+(user service, GUI on 127.0.0.1:8384 only) shares `~/backups/nostr-relay-khatru` send-only with the owner's home server (receive-only there).
 
 
 `docker-compose.yml`: `relay` (no published port) behind `caddy` (TLS for

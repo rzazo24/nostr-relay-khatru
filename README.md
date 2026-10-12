@@ -210,6 +210,7 @@ The script checks that the backup decompresses and passes SQLite's `integrity_ch
 - **Backups**: `./scripts/backup-db.sh` makes a consistent copy with `sqlite3 .backup`
   (safe while the relay is writing) into `~/backups/nostr-relay-khatru`, keeping 14
   days. Schedule it with cron yourself, e.g. `17 3 * * * /path/to/scripts/backup-db.sh`.
+- **Signer on the same machine (optional)**: with `BUNKER_STATUS_CMD` the check also alerts when a hivescope-bunker is stopped or locked (after a restart it starts locked), without ever restarting it.
 - **Self-heal (optional)**: `./scripts/healthcheck.sh` restarts the containers after
   repeated failures. It is never installed automatically; read its header first.
 - **External alerts (optional)**: the script can also ping a monitoring service — set `PING_URL` (called each time the relay answers; a service like healthchecks.io emails you when the pings *stop*, which also covers the whole server going down) and, optionally, `PING_FAIL_URL` (called once `ALERT_THRESHOLD` failures in a row have happened — 2 by default, the same moment it would restart — to alert sooner; a single blip sends nothing). An unreachable monitor never breaks the check. Or point an outside HTTP monitor (UptimeRobot…) at `https://<RELAY_DOMAIN>/`, which answers 200.

@@ -4,6 +4,18 @@
 //  · ui:   frases que escribe admin.js / nip46.js con t('…'), por el propio texto en español; {nombre} son huecos.
 window.PANEL_EN = {
   html: {
+    "7b8f3109": "Bunker signatures", /* Firmas del bunker */
+    "bb17a020": "What your HiveScope Bunker has signed, refused and paired, newest first. It never keeps the content of what it signed.", /* Lo que tu HiveScope Bunker ha firmado… */
+    "b8617f6a": "Result", /* Resultado */
+    "81f51acc": "App", /* App */
+    "472c9354": "Detail", /* Detalle */
+    "f7386eb3": "Only shown if the relay can read the journal of your <b>HiveScope Bunker</b> (<code>RELAY_BUNKER_JOURNAL</code>). The bunker writes every signing request to a file in its folder, which the relay reads <b>read-only</b>; the last 1,000 are kept and you see the 300 most recent here.", /* Solo aparece si el relé tiene acceso al registro… */
+    "b256885b": "Date and time of the request, in your local time.", /* Fecha y hora de la petición… */
+    "0682881f": "<b>Signed</b>, <b>refused</b> (the reason is in Detail) or <b>paired</b> (a new app used its <code>bunker://</code> address for the first time).", /* Firmado, rechazado… emparejado */
+    "33bcd761": "The name you gave the connection with <code>hivescope-bunker add</code>, or “unknown” if whoever asked has no connection (for example, a revoked address or a wrong secret).", /* El nombre que diste a la conexión… */
+    "6f31112b": "The type of event that was to be signed.", /* El tipo de evento que se pidió firmar. */
+    "cb3b3945": "The id of the signed event (look it up in the relay with “Search”) or the reason for the refusal.", /* El identificador del evento firmado… */
+    "e74f31d6": "It never keeps the content of what was signed, nor any key. A refusal you did not expect (an app asking for a type it should not, or an unknown app) is the sign to revoke that connection.", /* Nunca guarda el contenido… */
     "a09c34ac": "Log in with the address of my own bunker (bunker://…)", /* Entrar con una dirección de mi bunker propio */
     "ddc97b3a": "If you run <b>HiveScope Bunker</b> on your server: create a connection with <code>hivescope-bunker add panel panel --url https://relay.hivescope.xyz/admin/api/login</code> and paste its address here. It is a password: it is not kept on this page.", /* Si tienes HiveScope Bunker en tu servidor */
     "bf4f9ba2": "Bunker address", /* Dirección bunker */
@@ -318,6 +330,12 @@ window.PANEL_EN = {
     "11b386e5": "The amount allowed at once before the rate limit starts to act.", /* Cantidad que se permite de golpe antes de que empiece a actu */
   },
   ui: {
+    "Últimas 24 h: {s} firmados, {r} rechazados.": "Last 24 h: {s} signed, {r} refused.",
+    "desconocida": "unknown",
+    "Rechazado": "Refused",
+    "Firmado": "Signed",
+    "Emparejado": "Paired",
+    "El bunker todavía no ha anotado nada.": "The bunker has not recorded anything yet.",
     "eso no es una dirección bunker://": "that is not a bunker:// address",
     "la dirección bunker no trae ningún relé": "the bunker address has no relay",
     "la dirección bunker no incluye ningún relé que este panel pueda usar": "the bunker address has no relay this panel can use",

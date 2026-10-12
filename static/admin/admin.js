@@ -210,6 +210,7 @@ async function load() {
   render(await res.json())
   await loadModeration(false)
   await loadHistory()
+  await loadBunker()
   lastOk = Date.now()
   $('updated').textContent = t('Actualizado a las {h}', { h: clock(Math.floor(lastOk / 1000)) })
 }
@@ -523,6 +524,32 @@ function renderHistory(items) {
   }))
   if (!items.length) body.append(el('tr', {}, el('td', { colspan: '5', class: 'muted', text: t('Todavía no hay acciones anotadas.') })))
   labelTable('audit')
+}
+
+// Firmas del bunker: el relé lee (solo lectura) el registro que escribe hivescope-bunker. Si no está configurado, la sección no aparece.
+const BUNKER_OUTCOMES = { signed: 'Firmado', refused: 'Rechazado', paired: 'Emparejado' }
+function idButton(id) { // el id abreviado; al pulsarlo se busca en el relé
+  const b = el('button', { class: 'pk', type: 'button', title: id, text: id.slice(0, 12) + '…' })
+  b.addEventListener('click', () => { searchFor(id, ''); $('search-panel').scrollIntoView({ block: 'start' }) })
+  return b
+}
+async function loadBunker() {
+  const res = await fetch('/admin/api/bunker', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null)
+  const d = res && res.ok ? await res.json().catch(() => null) : null
+  $('bunker-panel').hidden = !d || !d.available
+  if (!d || !d.available) return
+  const items = d.entries || [], day = Math.floor(Date.now() / 1000) - 86400
+  const last = items.filter((e) => e.t >= day)
+  $('bunker-summary').textContent = t('Últimas 24 h: {s} firmados, {r} rechazados.', { s: last.filter((e) => e.outcome === 'signed').length, r: last.filter((e) => e.outcome === 'refused').length })
+  const body = $('bunker-log').querySelector('tbody')
+  body.replaceChildren(...items.map((e) => {
+    const detail = e.id ? el('td', {}, idButton(e.id)) : el('td', { class: 'reason', text: e.reason || (e.method ? e.method : '') })
+    const who = e.conn ? el('td', { text: e.conn }) : el('td', { class: 'muted' }, t('desconocida'), e.client ? el('code', { text: ` ${e.client}` }) : '')
+    return el('tr', { class: e.outcome === 'refused' ? 'refused' : '' }, el('td', { text: dateTimeFmt(e.t) }), el('td', { text: t(BUNKER_OUTCOMES[e.outcome] || e.outcome) }), who,
+      el('td', {}, e.kind !== undefined && e.kind !== null ? kindBadge(e.kind) : '—'), detail)
+  }))
+  if (!items.length) body.append(el('tr', {}, el('td', { colspan: '5', class: 'muted', text: t('El bunker todavía no ha anotado nada.') })))
+  labelTable('bunker-log')
 }
 
 const INFO_FIELDS = ['name', 'description', 'icon', 'contact', 'tags', 'languages', 'postingPolicy']

@@ -86,24 +86,25 @@ type Moderation interface {
 
 // Options agrupa lo que necesita el panel.
 type Options struct {
-	Owner        string // pubkey (hex) del dueño; vacío = panel desactivado
-	PublicURL    string // URL pública https (si vacía, se deduce de la petición)
-	DBPath       string
-	BackupDir    string // dónde deja scripts/backup-db.sh las copias (vacío = no se muestra el estado de las copias)
-	Version      string
-	StartedAt    time.Time
-	Activity     Activity
-	Moderation   Moderation
-	Stats        *stats.Store      // histórico persistente (más de una hora)
-	Store        *moderation.Store // para las acciones de moderación del panel
-	Effects      Effects
-	Info         func() InfoView             // nombre, descripción e icono que anuncia NIP-11 ahora mismo
-	InfoDefaults InfoView                    // los de la configuración (a los que vuelve "restaurar")
-	Log          func(action, target string) // deja constancia (sin contenido ni IPs) de cada acción
-	Connections  func() int64
-	NewKeyHours  int            // RELAY_NEW_KEY_HOURS: la insignia «nueva» dura al menos 24 h, o este periodo si es más largo
-	Config       map[string]any // límites y NIPs, tal cual se muestran (solo lectura)
-	Now          func() time.Time
+	Owner         string // pubkey (hex) del dueño; vacío = panel desactivado
+	PublicURL     string // URL pública https (si vacía, se deduce de la petición)
+	DBPath        string
+	BackupDir     string // dónde deja scripts/backup-db.sh las copias (vacío = no se muestra el estado de las copias)
+	Version       string
+	StartedAt     time.Time
+	Activity      Activity
+	Moderation    Moderation
+	Stats         *stats.Store      // histórico persistente (más de una hora)
+	Store         *moderation.Store // para las acciones de moderación del panel
+	Effects       Effects
+	Info          func() InfoView             // nombre, descripción e icono que anuncia NIP-11 ahora mismo
+	InfoDefaults  InfoView                    // los de la configuración (a los que vuelve "restaurar")
+	Log           func(action, target string) // deja constancia (sin contenido ni IPs) de cada acción
+	Connections   func() int64
+	NewKeyHours   int            // RELAY_NEW_KEY_HOURS: la insignia «nueva» dura al menos 24 h, o este periodo si es más largo
+	Config        map[string]any // límites y NIPs, tal cual se muestran (solo lectura)
+	Now           func() time.Time
+	BunkerJournal string // registro de firmas del bunker (ver bunker.go); vacío = no hay
 }
 
 // Panel atiende /admin/api/*.
@@ -156,6 +157,7 @@ func (p *Panel) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/api/history", p.requireSession(p.history))
 	mux.HandleFunc("GET /admin/api/search", p.requireSession(p.search))
 	mux.HandleFunc("GET /admin/api/backup", p.requireSession(p.backup))
+	mux.HandleFunc("GET /admin/api/bunker", p.requireSession(p.bunker))
 	mux.HandleFunc("GET /stats.json", p.publicStats) // público a propósito: solo agregados (ver publicstats.go)
 	p.mountModeration(mux)
 }

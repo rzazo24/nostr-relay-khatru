@@ -55,6 +55,15 @@ export async function startStack(extraEnv = {}) {
   fs.mkdirSync(backupDir)
   const backupFile = path.join(backupDir, 'nostr-relay-khatru-20261001T031701Z.sqlite.gz')
   fs.writeFileSync(backupFile, Buffer.alloc(2048)) // una copia «reciente» de mentira
+  // el registro de firmas de un HiveScope Bunker (lo escribe el bunker; el relé solo lo lee)
+  const bunkerJournal = path.join(dir, 'signatures.jsonl')
+  const nowS = Math.floor(Date.now() / 1000)
+  fs.writeFileSync(bunkerJournal, [
+    { t: nowS - 3600, outcome: 'paired', conn: 'quill-phone', profile: 'quill' },
+    { t: nowS - 1800, outcome: 'signed', conn: 'quill-phone', profile: 'quill', kind: 1, id: 'ab'.repeat(32) },
+    { t: nowS - 900, outcome: 'refused', conn: 'quill-phone', profile: 'quill', kind: 4, reason: 'quill-phone may not sign kind 4' },
+    { t: nowS - 60, outcome: 'refused', method: 'connect', client: '1a2b3c4d', reason: 'not authorised' },
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n')
   const relayPort = await freePort()
   const panelPort = await freePort()
 
@@ -65,7 +74,7 @@ export async function startStack(extraEnv = {}) {
       RELAY_NAME: 'Relé de pruebas', RELAY_DESCRIPTION: 'Descripción original',
       // límites de velocidad altos: las pruebas publican muchos eventos seguidos
       RELAY_EVENTS_PER_MINUTE: '1000000', RELAY_EVENTS_BURST: '1000000', RELAY_REQS_PER_MINUTE: '1000000', RELAY_REQS_BURST: '1000000', RELAY_CONNS_PER_MINUTE: '1000000', RELAY_CONNS_BURST: '1000000',
-      RELAY_MAX_CONTENT_LENGTH: '800', RELAY_RETENTION_DAYS: '180', RELAY_BACKUP_DIR: backupDir,
+      RELAY_MAX_CONTENT_LENGTH: '800', RELAY_RETENTION_DAYS: '180', RELAY_BACKUP_DIR: backupDir, RELAY_BUNKER_JOURNAL: bunkerJournal,
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

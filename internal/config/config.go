@@ -27,6 +27,7 @@ type Config struct {
 	PostingPolicy string   // URL de las normas de uso (opcional)
 	PublicURL     string   // URL pública https del relé (para NIP-42/NIP-86); vacío = se deduce de la petición
 	BackupDir     string   // carpeta (dentro del contenedor) con las copias de scripts/backup-db.sh, solo para enseñar su estado en el panel
+	BunkerJournal string   // RELAY_BUNKER_JOURNAL: el registro de firmas de hivescope-bunker (signatures.jsonl), solo lectura, para el panel; vacío = no se enseña
 	Icon          string   // icono del relé (NIP-11): URL absoluta o ruta relativa a la URL pública (p. ej. /icon.png)
 
 	// Límites por evento.
@@ -81,6 +82,7 @@ func Load(get func(string) string) (Config, error) {
 		PublicURL:           strings.TrimRight(get("RELAY_PUBLIC_URL"), "/"),
 		Icon:                strings.TrimSpace(get("RELAY_ICON")),
 		BackupDir:           strings.TrimSpace(get("RELAY_BACKUP_DIR")),
+		BunkerJournal:       strings.TrimSpace(get("RELAY_BUNKER_JOURNAL")),
 		PrivateKinds:        []int{4, 1059},
 		MaxContentLength:    65536,
 		MaxEventTags:        2000,

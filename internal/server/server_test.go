@@ -1898,3 +1898,32 @@ func TestNewKeys_BackfillOnStartup(t *testing.T) {
 		t.Fatalf("al arrancar se rellena con la fecha de su evento más antiguo: %d %v", first, ok)
 	}
 }
+
+func TestAdminBunkerJournal(t *testing.T) {
+	owner := newKeys()
+	journal := filepath.Join(t.TempDir(), "signatures.jsonl")
+	_, ts := start(t, map[string]string{"RELAY_PUBKEY": owner.pk, "RELAY_BUNKER_JOURNAL": journal})
+	if res, _ := adminCall(t, ts, "GET", "/admin/api/bunker", "", ""); res.StatusCode != 401 {
+		t.Fatal("sin sesión no se ve el registro del bunker")
+	}
+	cookie := adminLogin(t, ts, owner)
+	get := func() map[string]any {
+		res, m := adminCall(t, ts, "GET", "/admin/api/bunker", "", cookie)
+		if res.StatusCode != 200 {
+			t.Fatalf("%d", res.StatusCode)
+		}
+		return m
+	}
+	if m := get(); m["available"] != true || len(m["entries"].([]any)) != 0 {
+		t.Fatalf("sin archivo todavía: %v", m)
+	}
+	os.WriteFile(journal, []byte(`{"t":1,"outcome":"paired","conn":"quill-phone"}
+not json
+{"t":2,"outcome":"signed","conn":"quill-phone","kind":1,"id":"ab"}
+{"t":3,"outcome":"refused","conn":"quill-phone","kind":4,"reason":"may not sign kind 4"}
+`), 0o644)
+	es := get()["entries"].([]any)
+	if len(es) != 3 || es[0].(map[string]any)["outcome"] != "refused" || es[2].(map[string]any)["outcome"] != "paired" {
+		t.Fatalf("las tres líneas válidas, la más reciente primero: %v", es)
+	}
+}

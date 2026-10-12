@@ -210,6 +210,13 @@
         <div class="scroll"><table id="audit"><thead><tr><th>Cuándo</th><th>Acción</th><th>Objetivo</th><th>Nota</th><th>Desde</th></tr></thead><tbody></tbody></table></div>
       </section>
 
+      <section class="panel" id="bunker-panel" hidden>
+        <h2>Firmas del bunker <button type="button" class="q" data-help="h-bunker" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
+        <p class="muted small">Lo que tu HiveScope Bunker ha firmado, rechazado y emparejado, la más reciente primero. Nunca guarda el contenido de lo firmado.</p>
+        <p class="muted small" id="bunker-summary"></p>
+        <div class="scroll"><table id="bunker-log"><thead><tr><th>Cuándo</th><th>Resultado</th><th>App</th><th>Tipo</th><th>Detalle</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
       <section class="panel">
         <h2>Configuración <button type="button" class="q" data-help="h-config" aria-label="Ayuda sobre esta sección" title="Qué es esto">?</button></h2>
         <dl id="config" class="kv"></dl>
@@ -388,6 +395,19 @@
           <dt>Desde</dt><dd><b>panel</b> si lo hiciste aquí, o <b>NIP-86</b> si fue con un cliente de administración. Los dos quedan anotados.</dd>
         </dl>
         <p>No registra quién eres (solo el dueño puede hacerlo) ni las acciones que fallaron o fueron rechazadas.</p>
+      </section>
+
+      <section id="h-bunker">
+        <h3>Firmas del bunker</h3>
+        <p>Solo aparece si el relé tiene acceso al registro de tu <b>HiveScope Bunker</b> (<code>RELAY_BUNKER_JOURNAL</code>). El bunker apunta cada petición de firma en un archivo de su carpeta, que el relé lee <b>en solo lectura</b>; se conservan las últimas 1 000 y aquí ves las 300 más recientes.</p>
+        <dl>
+          <dt>Cuándo</dt><dd>Fecha y hora de la petición, en tu hora local.</dd>
+          <dt>Resultado</dt><dd><b>Firmado</b>, <b>rechazado</b> (el motivo va en Detalle) o <b>emparejado</b> (una app nueva usó su dirección <code>bunker://</code> por primera vez).</dd>
+          <dt>App</dt><dd>El nombre que diste a la conexión con <code>hivescope-bunker add</code>, o «desconocida» si quien pidió no tiene conexión (por ejemplo, una dirección revocada o un secreto equivocado).</dd>
+          <dt>Tipo</dt><dd>El tipo de evento que se pidió firmar.</dd>
+          <dt>Detalle</dt><dd>El identificador del evento firmado (búscalo en el relé con «Buscar») o el motivo del rechazo.</dd>
+        </dl>
+        <p>Nunca guarda el contenido de lo firmado ni ninguna clave. Un rechazo que no esperabas (una app que pide un tipo que no le toca, o una app desconocida) es la señal para revocar esa conexión.</p>
       </section>
 
       <section id="h-config">

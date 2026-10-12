@@ -161,6 +161,21 @@ function mockBunker({ userSecret = null, secret = 'bunker-secret-1', relayPaths 
 }
 
 describe('panel de control', () => {
+  it('enseña las firmas del bunker (la más reciente primero; los rechazos resaltados; una app desconocida se dice)', async () => {
+    const { ctx, page } = await openPanel()
+    try {
+      await login(page)
+      await page.waitForSelector('#bunker-panel:not([hidden]) #bunker-log tbody tr', { timeout: 10000 })
+      const rows = await page.$$eval('#bunker-log tbody tr', (r) => r.map((x) => x.innerText.replace(/\s+/g, ' ').trim()))
+      assert.equal(rows.length, 4)
+      assert.match(rows[0], /Rechazado desconocida 1a2b3c4d/)
+      assert.match(rows[1], /Rechazado quill-phone 4 · .* may not sign kind 4/)
+      assert.match(rows[2], /Firmado quill-phone 1 · .* abababababab…/)
+      assert.match(rows[3], /Emparejado quill-phone/)
+      assert.match(await page.innerText('#bunker-summary'), /1 firmados, 2 rechazados/)
+      assert.equal(await page.locator('#bunker-log tbody tr.refused').count(), 2)
+    } finally { await ctx.close() }
+  })
   before(async () => {
     stack = await startStack()
     relay = await Relay.connect(stack.relayWs)

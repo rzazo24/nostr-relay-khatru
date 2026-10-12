@@ -25,10 +25,14 @@ services:
       RELAY_LISTEN_ADDR: ":3334"
       # Solo si defines BACKUP_DIR en .env: el panel enseña la fecha de la última copia de seguridad.
       RELAY_BACKUP_DIR: ${BACKUP_DIR:+/backups}
+      # Solo si defines BUNKER_JOURNAL_DIR en .env: el panel enseña lo que ha firmado tu HiveScope Bunker.
+      RELAY_BUNKER_JOURNAL: ${BUNKER_JOURNAL_DIR:+/bunker/signatures.jsonl}
     volumes:
       - relay-data:/app/data
       # La carpeta de las copias (la misma donde las deja scripts/backup-db.sh), en solo lectura.
       - ${BACKUP_DIR:-./backups}:/backups:ro
+      # El registro de firmas del bunker (su carpeta journal/, nunca la del bunker entera), en solo lectura.
+      - ${BUNKER_JOURNAL_DIR:-./bunker-journal}:/bunker:ro
     networks:
       - internal
     healthcheck:

@@ -312,7 +312,9 @@ func (s *Server) setupInfo(version string) {
 
 	// Solo lo que de verdad hace este relé (khatru anuncia por defecto otros, como
 	// el 70 sin implementarlo). khatru añade solos el 9, 45 y 77 según lo configurado.
-	info.SupportedNIPs = []any{1, 9, 11, 40, 42, 45, 70, 77}
+	// El 50 (búsqueda) lo resuelve el backend de SQLite con un LIKE sobre el contenido:
+	// sin relevancia ni índice, de sobra para el tamaño de este relé.
+	info.SupportedNIPs = []any{1, 9, 11, 40, 42, 45, 50, 70, 77}
 	if cfg.MinPoW > 0 {
 		info.SupportedNIPs = append(info.SupportedNIPs, 13)
 	}

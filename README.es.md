@@ -22,7 +22,8 @@ límites de velocidad descritos más abajo. Trátala con cariño; si se abusa de
 - Habla el protocolo y guarda los eventos en SQLite. NIPs soportados (y el documento NIP-11
   del relé anuncia exactamente estos, ni uno más): **1** (eventos, filtros, suscripciones),
   **9** (borrados), **11** (documento de información), **13** (prueba de trabajo, solo si se
-  activa), **40** (caducidad), **42** (autenticación), **45** (`COUNT`), **70** (eventos
+  activa), **40** (caducidad), **42** (autenticación), **45** (`COUNT`), **50** (búsqueda:
+  un «contiene» sobre el texto, lo más nuevo primero, sin ordenar por relevancia), **70** (eventos
   protegidos) y **77** (sincronización Negentropy), más el **86** (API de gestión) cuando hay
   un dueño configurado.
 - Acepta cualquier kind por defecto; se puede restringir con `RELAY_ALLOWED_KINDS`.

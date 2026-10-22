@@ -22,7 +22,8 @@ rate limits described below. Please be kind to it; if it gets abused, it will be
 - Speaks the core protocol and stores events in SQLite. Supported NIPs (and the
   relay's NIP-11 document advertises exactly these, no more): **1** (events, filters,
   subscriptions), **9** (deletions), **11** (information document), **13** (proof of work,
-  only when enabled), **40** (expiration), **42** (authentication), **45** (`COUNT`),
+  only when enabled), **40** (expiration), **42** (authentication), **45** (`COUNT`), **50** (search: a plain
+  "contains" over the content, newest first, no relevance ranking),
   **70** (protected events) and **77** (Negentropy sync), plus **86** (management API)
   when an owner is configured.
 - Accepts any kind by default; optionally restrict it with `RELAY_ALLOWED_KINDS`.

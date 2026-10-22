@@ -168,7 +168,7 @@ func nips(doc map[string]any) []int {
 func TestNIP11_AdvertisesOnlyWhatIsEnabled(t *testing.T) {
 	_, ts := start(t, nil)
 	got := nips(nip11Doc(t, ts))
-	if want := []int{1, 9, 11, 40, 42, 45, 70, 77}; !slices.Equal(got, want) {
+	if want := []int{1, 9, 11, 40, 42, 45, 50, 70, 77}; !slices.Equal(got, want) {
 		t.Fatalf("NIPs por defecto: %v, se esperaba %v", got, want)
 	}
 
@@ -178,7 +178,7 @@ func TestNIP11_AdvertisesOnlyWhatIsEnabled(t *testing.T) {
 
 	_, ts = start(t, map[string]string{"RELAY_MIN_POW": "8", "RELAY_PUBKEY": newKeys().pk, "RELAY_AUTH_REQUIRED": "true"})
 	doc := nip11Doc(t, ts)
-	if want := []int{1, 9, 11, 13, 40, 42, 45, 70, 77, 86}; !slices.Equal(nips(doc), want) {
+	if want := []int{1, 9, 11, 13, 40, 42, 45, 50, 70, 77, 86}; !slices.Equal(nips(doc), want) {
 		t.Fatalf("con NIP-13 y NIP-86 activados: %v", nips(doc))
 	}
 	lim := doc["limitation"].(map[string]any)
@@ -219,6 +219,31 @@ func TestNIP13_RequiresProofOfWork(t *testing.T) {
 	ev.Sign(k.sk)
 	if err := publish(r, ev); err != nil {
 		t.Fatalf("un evento minado a 8 bits debería aceptarse: %v", err)
+	}
+}
+
+// ---------- NIP-50 (búsqueda) ----------
+
+func TestNIP50_SearchFindsNotesByTheirText(t *testing.T) {
+	_, ts := start(t, nil)
+	r := connect(t, ts)
+	k := newKeys()
+	for _, c := range []string{"I use Jellyfin for music", "nothing to see here", "jellyfin again, in lower case"} {
+		if err := publish(r, k.event(1, c, nil)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, closed := fetch(t, r, nostr.Filter{Kinds: []int{1}, Search: "Jellyfin"})
+	if closed != "" || len(got) != 2 {
+		t.Fatalf("la búsqueda debería encontrar las 2 notas que lo dicen (sin distinguir mayúsculas): %d, cerrada: %q", len(got), closed)
+	}
+	for _, e := range got {
+		if !strings.Contains(strings.ToLower(e.Content), "jellyfin") {
+			t.Fatalf("devolvió una nota que no lo dice: %q", e.Content)
+		}
+	}
+	if got, _ := fetch(t, r, nostr.Filter{Kinds: []int{1}, Search: "no está en ninguna"}); len(got) != 0 {
+		t.Fatalf("una búsqueda sin coincidencias no debería devolver nada: %d", len(got))
 	}
 }
 

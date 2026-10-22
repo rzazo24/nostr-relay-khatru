@@ -1,6 +1,6 @@
 module github.com/rzazo24/nostr-relay-khatru
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/fiatjaf/eventstore v0.17.14
@@ -44,6 +44,6 @@ require (
 	github.com/valyala/fasthttp v1.59.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )

@@ -14,7 +14,10 @@ cd "$(dirname "$0")/.."
 export VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 echo "versión: $VERSION"
 
-docker compose up -d --build relay
+# --pull: baja antes las imágenes base (golang, debian) más recientes de su etiqueta. Sin él, Docker reutiliza la que
+# tenga guardada, y una golang:1.27 vieja no compila si go.mod pide un parche más nuevo (pasó con 1.27.1 → 1.27.3).
+docker compose build --pull relay
+docker compose up -d relay
 if [ "${1:-}" = "--caddy" ]; then
   docker compose up -d --force-recreate caddy
 fi

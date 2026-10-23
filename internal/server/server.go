@@ -23,6 +23,7 @@ import (
 	khatrupolicies "github.com/fiatjaf/khatru/policies"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
+	"github.com/nbd-wtf/go-nostr/nip40"
 	"github.com/nbd-wtf/go-nostr/nip86"
 
 	"github.com/rzazo24/nostr-relay-khatru/internal/admin"
@@ -145,6 +146,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 			MaxFutureSkew:    cfg.MaxFutureSkew,
 			AllowedKinds:     cfg.AllowedKinds,
 		}, time.Now)),
+		s.logEvent(policies.NewChatHistory(time.Now)),
 		s.logEvent(policies.NewPoW(cfg.MinPoW)),
 		// la última: anota cuándo se ve cada clave y, si está activado, aplaza las notas de las claves nuevas
 		s.logEvent(policies.NewNewKeys(store, policies.NewKeyOptions{Hours: cfg.NewKeyHours, Kinds: kindSet(cfg.NewKeyKinds), Owner: cfg.PubKey}, time.Now)),
@@ -218,6 +220,8 @@ func New(cfg config.Config, version string) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.stop = cancel
 	go retention.Start(ctx, s.db.QueryEvents, s.db.DeleteEvent, cfg.RetentionDays, cfg.PubKey, time.Hour, s.act.Retention)
+	// Las salas del chat con historial prometen un plazo: sus mensajes caducados se barren cada 5 minutos (ver policies.NewChatHistory).
+	go retention.StartExpired(ctx, s.db.QueryEvents, s.db.DeleteEvent, []int{policies.ChatHistoryMessageKind, policies.ChatHistoryReactionKind}, 5*time.Minute, s.act.ChatExpired)
 	s.done.Add(1)
 	go s.statsLoop(ctx)
 	return s, nil
@@ -274,16 +278,20 @@ func (s *Server) query(ctx context.Context, filter nostr.Filter) (chan *nostr.Ev
 		filter.Limit = limit
 	}
 	ch, err := s.db.QueryEvents(ctx, filter)
-	if err != nil || ch == nil || len(s.private) == 0 || khatru.IsInternalCall(ctx) {
+	if err != nil || ch == nil || khatru.IsInternalCall(ctx) {
 		return ch, err
 	}
 
-	viewer := khatru.GetAuthed(ctx)
+	// NIP-40: lo caducado no se entrega aunque el barrido aún no lo haya borrado.
+	viewer, now := khatru.GetAuthed(ctx), nostr.Now()
 	out := make(chan *nostr.Event)
 	go func() {
 		defer close(out)
 		for ev := range ch {
-			if !s.private.Visible(ev, viewer) {
+			if len(s.private) > 0 && !s.private.Visible(ev, viewer) {
+				continue
+			}
+			if exp := nip40.GetExpiration(ev.Tags); exp != -1 && exp <= now {
 				continue
 			}
 			select {

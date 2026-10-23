@@ -190,6 +190,8 @@ Clients show the NIP-11 `icon`. Put a square image (PNG/JPG/WebP, ~512×512, sma
 
 ## Data retention
 
+**Expiring events (NIP-40).** An event whose `expiration` has passed is never served, even before it is deleted. The chat's rooms with history (kinds `4201` message and `4203` reaction, see [nostr-ephemeral-chat](https://github.com/rzazo24/nostr-ephemeral-chat)) are only accepted with an `expiration` at most 7 days ahead, one 32-hex room tag and, for reactions, one message id; their expired events are swept every 5 minutes (`chat-expired deleted=…` in the log), independently of khatru's own hourly sweep.
+
 An open relay accumulates events forever unless you tell it otherwise. `RELAY_RETENTION_DAYS=N` makes a background pass (an hour after start, then hourly, at most 20 000 deletions per pass) delete **regular** events older than `N` days: notes, reactions, reposts, deletion requests, direct messages… It never deletes what describes an account's *current state* (profiles, contact lists, relay lists and other replaceable/addressable kinds — one per account and kind) nor anything published by the owner (`RELAY_PUBKEY`). `0` (the default) keeps everything. Each pass that deletes something logs `retention deleted=… scanned=…`. The control panel shows the setting and a *events per day* chart to judge the growth rate. The production instance uses 180 days.
 
 ## Restoring a backup

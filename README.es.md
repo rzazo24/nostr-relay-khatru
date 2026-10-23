@@ -188,6 +188,8 @@ Los clientes muestran el `icon` de NIP-11. Pon una imagen cuadrada (PNG/JPG/WebP
 
 ## Retención de datos
 
+**Eventos con caducidad (NIP-40).** Un evento cuyo `expiration` ya pasó no se entrega nunca, aunque aún no se haya borrado. Las salas del chat con historial (kinds `4201` mensaje y `4203` reacción, ver [nostr-ephemeral-chat](https://github.com/rzazo24/nostr-ephemeral-chat)) solo se aceptan con un `expiration` de como mucho 7 días, un tag de sala de 32 caracteres hex y, en las reacciones, el id de un mensaje; sus eventos caducados se barren cada 5 minutos (`chat-expired deleted=…` en el log), sin depender del barrido horario de khatru.
+
 Un relé abierto acumula eventos para siempre si no le dices otra cosa. `RELAY_RETENTION_DAYS=N` activa una pasada en segundo plano (un minuto tras arrancar y luego cada hora, como mucho 20 000 borrados por pasada) que elimina los eventos **normales** con más de `N` días: notas, reacciones, reposts, peticiones de borrado, mensajes directos… Nunca borra lo que describe el *estado actual* de una cuenta (perfiles, contactos, listas de relés y demás tipos reemplazables o direccionables: uno por cuenta y tipo) ni nada publicado por el dueño (`RELAY_PUBKEY`). `0` (el valor por defecto) lo guarda todo. Cada pasada que borra algo deja una línea `retention deleted=… scanned=…` en el log. El panel de control muestra el ajuste y una gráfica de *eventos por día* para valorar el ritmo de crecimiento. La instancia de producción usa 180 días.
 
 ## Restaurar un backup

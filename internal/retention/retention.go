@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip40"
 )
 
 // QueryFunc y DeleteFunc tienen la firma de los métodos QueryEvents y DeleteEvent del almacén.
@@ -98,6 +99,77 @@ func Start(ctx context.Context, query QueryFunc, del DeleteFunc, days int, keepP
 	}
 	select {
 	case <-time.After(time.Minute):
+		run()
+	case <-ctx.Done():
+		return
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
+}
+
+// SweepExpired borra los eventos de `kinds` cuya caducidad NIP-40 ya pasó. khatru tiene su propio barrido de caducados,
+// pero cada hora y solo de lo que ha visto desde que arrancó: estos kinds (las salas del chat con historial) prometen a
+// sus usuarios un plazo, así que se barren aparte, sin depender de eso.
+func SweepExpired(ctx context.Context, query QueryFunc, del DeleteFunc, now time.Time, kinds []int) (Result, error) {
+	var res Result
+	if len(kinds) == 0 {
+		return res, nil
+	}
+	cut := nostr.Timestamp(now.Unix())
+	var until *nostr.Timestamp
+	for res.Scanned < 10*maxPerSweep {
+		ch, err := query(ctx, nostr.Filter{Kinds: kinds, Until: until, Limit: batchSize})
+		if err != nil {
+			return res, err
+		}
+		var batch []*nostr.Event
+		for ev := range ch {
+			batch = append(batch, ev)
+		}
+		if len(batch) == 0 {
+			return res, nil
+		}
+		oldest := batch[0].CreatedAt
+		for _, ev := range batch {
+			res.Scanned++
+			if ev.CreatedAt < oldest {
+				oldest = ev.CreatedAt
+			}
+			if exp := nip40.GetExpiration(ev.Tags); exp == -1 || exp > cut {
+				continue
+			}
+			if err := del(ctx, ev); err != nil {
+				return res, err
+			}
+			res.Deleted++
+		}
+		if len(batch) < batchSize || oldest == 0 {
+			return res, nil
+		}
+		next := oldest - 1
+		until = &next
+	}
+	return res, nil
+}
+
+// StartExpired barre los caducados de `kinds` poco después de arrancar y luego cada `interval`, hasta que ctx se cancela.
+func StartExpired(ctx context.Context, query QueryFunc, del DeleteFunc, kinds []int, interval time.Duration, onSwept func(Result, error)) {
+	run := func() {
+		res, err := SweepExpired(ctx, query, del, time.Now(), kinds)
+		if onSwept != nil {
+			onSwept(res, err)
+		}
+	}
+	select {
+	case <-time.After(30 * time.Second):
 		run()
 	case <-ctx.Done():
 		return

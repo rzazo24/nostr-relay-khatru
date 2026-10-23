@@ -3,7 +3,9 @@ package retention
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -26,6 +28,9 @@ func (s *store) Query(ctx context.Context, f nostr.Filter) (chan *nostr.Event, e
 	var out []*nostr.Event
 	for _, e := range s.events {
 		if f.Until != nil && e.CreatedAt > *f.Until {
+			continue
+		}
+		if len(f.Kinds) > 0 && !slices.Contains(f.Kinds, e.Kind) {
 			continue
 		}
 		out = append(out, e)
@@ -150,5 +155,27 @@ func TestSweep_PropagatesErrors(t *testing.T) {
 	s := &store{events: []*nostr.Event{ev("a", 1, "x", ago(50))}}
 	if _, err := SweepOnce(context.Background(), s.Query, func(context.Context, *nostr.Event) error { return boom }, now, 10, ""); !errors.Is(err, boom) {
 		t.Fatal("error de borrado")
+	}
+}
+
+func TestSweepExpired_DeletesOnlyExpiredChatHistory(t *testing.T) {
+	exp := func(d time.Duration) nostr.Tags {
+		return nostr.Tags{{"expiration", strconv.FormatInt(now.Add(d).Unix(), 10)}}
+	}
+	with := func(e *nostr.Event, tags nostr.Tags) *nostr.Event { e.Tags = tags; return e }
+	s := &store{events: []*nostr.Event{
+		with(ev("caducado", 4201, "x", ago(2)), exp(-time.Hour)),
+		with(ev("reaccion-caducada", 4203, "x", ago(8)), exp(-24*time.Hour)),
+		with(ev("vigente", 4201, "x", ago(0)), exp(time.Hour)),
+		with(ev("otro-kind-caducado", 1, "x", ago(1)), exp(-time.Hour)), // no es del chat: lo lleva khatru
+		ev("sin-caducidad", 4201, "x", ago(1)),
+	}}
+	res, err := SweepExpired(context.Background(), s.Query, s.Delete, now, []int{4201, 4203})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(s.deleted)
+	if want := []string{"caducado", "reaccion-caducada"}; !slices.Equal(s.deleted, want) || res.Deleted != 2 {
+		t.Fatalf("borrados %v (%d), se esperaba %v", s.deleted, res.Deleted, want)
 	}
 }

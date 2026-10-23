@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -244,6 +245,37 @@ func TestNIP50_SearchFindsNotesByTheirText(t *testing.T) {
 	}
 	if got, _ := fetch(t, r, nostr.Filter{Kinds: []int{1}, Search: "no está en ninguna"}); len(got) != 0 {
 		t.Fatalf("una búsqueda sin coincidencias no debería devolver nada: %d", len(got))
+	}
+}
+
+// ---------- salas del chat con historial ----------
+
+func TestChatHistory_KeptUntilItExpiresAndNeverServedAfter(t *testing.T) {
+	_, ts := start(t, nil)
+	r := connect(t, ts)
+	k := newKeys()
+	topic := strings.Repeat("c", 32)
+	exp := func(d time.Duration) string { return strconv.FormatInt(time.Now().Add(d).Unix(), 10) }
+	if err := publish(r, k.event(4201, "cifrado", nostr.Tags{{"t", topic}})); err == nil {
+		t.Fatal("un mensaje del chat con historial sin caducidad no debería guardarse")
+	}
+	if err := publish(r, k.event(4201, "cifrado", nostr.Tags{{"t", topic}, {"expiration", exp(8 * 24 * time.Hour)}})); err == nil {
+		t.Fatal("más de 7 días no debería aceptarse")
+	}
+	if err := publish(r, k.event(4201, "dura", nostr.Tags{{"t", topic}, {"expiration", exp(24 * time.Hour)}})); err != nil {
+		t.Fatal(err)
+	}
+	if err := publish(r, k.event(4201, "caduca", nostr.Tags{{"t", topic}, {"expiration", exp(2 * time.Second)}})); err != nil {
+		t.Fatal(err)
+	}
+	f := nostr.Filter{Kinds: []int{4201}, Tags: nostr.TagMap{"t": {topic}}}
+	if got, _ := fetch(t, r, f); len(got) != 2 {
+		t.Fatalf("se esperaban los 2 mensajes vigentes: %d", len(got))
+	}
+	time.Sleep(3 * time.Second)
+	got, _ := fetch(t, connect(t, ts), f)
+	if len(got) != 1 || got[0].Content != "dura" {
+		t.Fatalf("lo caducado no debería servirse, aunque aún no se haya barrido: %d", len(got))
 	}
 }
 

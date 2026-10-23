@@ -258,6 +258,19 @@ func (a *activityLog) Retention(res retention.Result, err error) {
 	}
 }
 
+// ChatExpired deja constancia de un barrido de los mensajes caducados del chat con historial, solo si borró algo o falló.
+func (a *activityLog) ChatExpired(res retention.Result, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		fmt.Fprintf(a.out, "chat-expired error=%q deleted=%d\n", err.Error(), res.Deleted)
+		return
+	}
+	if res.Deleted > 0 {
+		fmt.Fprintf(a.out, "chat-expired deleted=%d scanned=%d\n", res.Deleted, res.Scanned)
+	}
+}
+
 // noteNoisyLocked cuenta un rechazo de evento contra su autor. Solo se cuentan eventos con una clave válida
 // (en las consultas el pubkey es el de quien se autenticó, y suele estar vacío).
 func (a *activityLog) noteNoisyLocked(what string, kind int, pubkey, reason string) {

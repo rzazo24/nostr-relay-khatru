@@ -224,8 +224,9 @@ The script checks that the backup decompresses and passes SQLite's `integrity_ch
 ## Caveats worth knowing
 
 - **The sqlite query limit.** The `eventstore/sqlite3` backend silently caps every query at
-  100 events (and 10 tag values per filter) unless you configure it — a client asking for
-  `limit: 500` gets 100 with no error. The server raises the backend's cap and applies the real
+  100 events unless you configure it — a client asking for `limit: 500` gets 100 with no
+  error — and fails the whole query if a filter has more than 10 kinds or 100 tag values. The
+  server raises both (100 kinds, 500 tag values). The server raises the backend's cap and applies the real
   limits itself (`RELAY_MAX_LIMIT`, or `RELAY_MAX_NEGENTROPY_EVENTS` in sync sessions); the smoke
   test checks that `limit: 500` really returns 130 events.
 - **go-nostr must be ≥ 0.52.** khatru v0.19.1 depends on go-nostr v0.51.8, whose NIP-77 message parser

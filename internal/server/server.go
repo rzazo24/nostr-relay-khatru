@@ -71,12 +71,13 @@ func New(cfg config.Config, version string) (*Server, error) {
 		}
 	}
 
-	// El backend de SQLite acota por defecto cada consulta a 100 eventos y a 10
-	// valores por tag, y lo hace EN SILENCIO (un `limit: 500` devuelve 100). Su tope
-	// interno se sube a lo máximo que servimos (una consulta normal o una sesión de
-	// sincronización NIP-77) y los topes reales se aplican en Server.query.
+	// El backend de SQLite acota por defecto cada consulta a 100 eventos, y lo hace EN
+	// SILENCIO (un `limit: 500` devuelve 100). Su tope interno se sube a lo máximo que
+	// servimos (una consulta normal o una sesión de sincronización NIP-77) y los topes
+	// reales se aplican en Server.query. Además rechaza ENTERA la consulta que pide más
+	// de 10 kinds o 100 valores de tag (el cliente no recibe nada): se suben los dos.
 	backendLimit := max(cfg.MaxLimit, cfg.MaxNegentropyEvents)
-	db := &sqlite3.SQLite3Backend{DatabaseURL: cfg.DBPath, QueryLimit: backendLimit, QueryTagsLimit: 500}
+	db := &sqlite3.SQLite3Backend{DatabaseURL: cfg.DBPath, QueryLimit: backendLimit, QueryKindsLimit: 100, QueryTagsLimit: 500}
 	if err := db.Init(); err != nil {
 		return nil, fmt.Errorf("no se pudo inicializar la base de datos sqlite en %q: %w", cfg.DBPath, err)
 	}

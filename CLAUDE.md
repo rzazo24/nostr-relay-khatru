@@ -84,8 +84,9 @@ against a real running binary — mirror that when changing behavior.
 list live (via `OverwriteRelayInformation`). A test asserts the list.
 
 **The sqlite backend silently caps queries** (learned the hard way in hivescope-relay):
-by default every query returns at most 100 events and allows 10 tag values per filter,
-with no error. The backend's `QueryLimit` is set to `max(RELAY_MAX_LIMIT,
+by default every query returns at most 100 events, with no error; and a filter with
+more than 10 kinds or 100 tag values fails *entirely* (the client gets nothing). The
+backend sets `QueryKindsLimit: 100` and `QueryTagsLimit: 500`. The backend's `QueryLimit` is set to `max(RELAY_MAX_LIMIT,
 RELAY_MAX_NEGENTROPY_EVENTS)` and `Server.query` applies the real cap: `RELAY_MAX_LIMIT`
 normally, `RELAY_MAX_NEGENTROPY_EVENTS` when `eventstore.IsNegentropySession(ctx)` (an NIP-77
 session capped at 500 would sync incompletely and never say so).

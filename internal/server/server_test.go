@@ -248,6 +248,21 @@ func TestNIP50_SearchFindsNotesByTheirText(t *testing.T) {
 	}
 }
 
+func TestQuery_ManyKindsInOneFilterStillAnswer(t *testing.T) {
+	_, ts := start(t, nil)
+	r := connect(t, ts)
+	k := newKeys()
+	if err := publish(r, k.event(1, "hola", nil)); err != nil {
+		t.Fatal(err)
+	}
+	// el backend de sqlite rechaza entera, por defecto, la consulta con más de 10 kinds: el cliente no recibiría nada
+	kinds := []int{0, 1, 3, 5, 6, 7, 16, 1111, 10000, 10002, 10050, 30023}
+	got, closed := fetch(t, r, nostr.Filter{Kinds: kinds, Authors: []string{k.pk}})
+	if closed != "" || len(got) != 1 {
+		t.Fatalf("una consulta con %d kinds debería encontrar la nota: %d, cerrada: %q", len(kinds), len(got), closed)
+	}
+}
+
 // ---------- salas del chat con historial ----------
 
 func TestChatHistory_KeptUntilItExpiresAndNeverServedAfter(t *testing.T) {

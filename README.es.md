@@ -222,8 +222,9 @@ El script comprueba que el backup se descomprime y pasa el `integrity_check` de 
 ## Advertencias que conviene conocer
 
 - **El límite oculto de consultas de sqlite.** El backend `eventstore/sqlite3` acota en silencio
-  cada consulta a 100 eventos (y a 10 valores por tag) si no se configura: un cliente que pide
-  `limit: 500` recibe 100 sin ningún error. El servidor sube el tope del backend y aplica él los
+  cada consulta a 100 eventos si no se configura (un cliente que pide `limit: 500` recibe 100
+  sin ningún error), y hace fallar la consulta entera si un filtro pide más de 10 kinds o 100
+  valores de tag. El servidor sube los dos (100 kinds, 500 valores de tag). El servidor sube el tope del backend y aplica él los
   límites reales (`RELAY_MAX_LIMIT`, o `RELAY_MAX_NEGENTROPY_EVENTS` en las sesiones de
   sincronización); la prueba de humo comprueba que `limit: 500` devuelve de verdad 130 eventos.
 - **go-nostr debe ser ≥ 0.52.** khatru v0.19.1 depende de go-nostr v0.51.8, cuyo analizador de

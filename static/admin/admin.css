@@ -1,4 +1,4 @@
-:root { --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --red:#e31337; --blue:#60a5fa; }
+:root { --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --red:#e31337; --blue:#60a5fa; --saved:#fbbf24; } /* stored events in amber: teal sat too close to the blue of ephemerals */
 * { box-sizing: border-box; }
 
 /* Barras de desplazamiento a juego con el diseño (estándar; el bloque -webkit- es solo para navegadores antiguos) */
@@ -36,7 +36,7 @@ dialog:focus, dialog:focus-visible { outline:none; }
 .chart svg { width:100%; height:140px; display:block; }
 .legend { display:flex; gap:16px; flex-wrap:wrap; margin:8px 0 0; color:var(--muted); font-size:.85rem; }
 .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
-.sw.saved { background:var(--accent); } .sw.ephemeral { background:var(--blue); } .sw.rejected { background:var(--red); }
+.sw.saved { background:var(--saved); } .sw.ephemeral { background:var(--blue); } .sw.rejected { background:var(--red); }
 .row { display:grid; grid-template-columns:minmax(120px,1.2fr) 3fr auto; gap:10px; align-items:center; padding:3px 0; }
 .bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; } .bar > i { display:block; height:100%; background:var(--accent); }
 .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
@@ -109,7 +109,7 @@ dialog::backdrop { background:rgba(3,6,10,.72); }
 .axis { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; margin-top:2px; }
 .summary { margin-top:10px; }
 
-.kw { font-weight:700; } .kw.saved { color:var(--accent); } .kw.ephemeral { color:var(--blue); } .kw.rejected { color:#ff6b81; }
+.kw { font-weight:700; } .kw.saved { color:var(--saved); } .kw.ephemeral { color:var(--blue); } .kw.rejected { color:#ff6b81; }
 
 .searchform { flex-direction:row; flex-wrap:wrap; align-items:center; } .searchform input:first-child { flex:1 1 320px; } .searchform .kindin { width:10rem; flex:0 0 auto; }
 .keycard { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:12px 0; background:rgba(255,255,255,.015); }

@@ -409,8 +409,9 @@ function renderChart(minutes, labelOf) {
   svg.setAttribute('preserveAspectRatio', 'none')
   minutes.forEach((m, i) => {
     let y = H - pad
-    for (const [key, color] of [['saved', '#2dd4bf'], ['ephemeral', '#60a5fa'], ['rejected', '#e31337']]) {
-      const h = (m[key] / max) * (H - 2 * pad)
+    for (const [key, color] of [['saved', '#fbbf24'], ['ephemeral', '#60a5fa'], ['rejected', '#e31337']]) {
+      // stored events are few next to ephemeral ones: never thinner than a visible sliver when there are any
+      const h = m[key] > 0 ? Math.max(key === 'saved' ? 3 : 0, (m[key] / max) * (H - 2 * pad)) : 0
       if (h <= 0) continue
       y -= h
       const r = document.createElementNS(NS, 'rect')

@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/fiatjaf/eventstore v0.17.15
 	github.com/fiatjaf/khatru v0.19.1
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/nbd-wtf/go-nostr v0.52.3
 )
 

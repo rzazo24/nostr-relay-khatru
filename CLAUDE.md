@@ -32,6 +32,8 @@ docker compose up -d --build                 # relay + Caddy (needs RELAY_DOMAIN
 ./scripts/backup-db.sh                       # consistent sqlite .backup (not cp)
 # copy one account's events between relays, as-is (read-only on the source; try --dry-run first)
 node scripts/copy-events.mjs <src-relay> <dst-relay> <npub|hex> [--dry-run]
+# resend an account's own recent events to the write relays of its NIP-65 list where missing (as-is, never signs; nightly from cron)
+node scripts/rebroadcast-own.mjs <src-relay> <npub|hex> [--hours=48] [--dry-run]
 ```
 
 Maintenance: `.github/dependabot.yml` opens weekly PRs (Go modules, Docker base images, Actions; npm monthly) and the CI job `vulncheck` runs `govulncheck` (fails only on vulnerabilities your code actually calls; the VPS itself patches via unattended-upgrades but needs a manual reboot for new kernels).
@@ -294,7 +296,8 @@ Running in production on the author's Oracle Cloud VPS (arm64) at `wss://relay.h
 via this compose file, with a local `.env` (gitignored: `RELAY_DOMAIN`, name, description,
 `RELAY_PUBLIC_URL`, `RELAY_PUBKEY` = the owner's key for NIP-86). `docker compose up -d --force-recreate relay`
 after editing `.env` (env_file is read when the container is created). A daily cron runs
-`scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`); the
+`scripts/backup-db.sh` (03:17, log in `~/backups/nostr-relay-khatru/backup.log`) and, at 03:47, `scripts/rebroadcast-own.mjs` for the owner's npub
+(last 48 h from this relay to the owner's NIP-65 write relays, only what each lacks; one summary line a night in `~/backups/nostr-relay-khatru/rebroadcast.log`); the
 healthcheck script (pings healthchecks.io via `PING_URL`/`PING_FAIL_URL` set in the cron line; `PING_FAIL_URL` only fires after `ALERT_THRESHOLD`=2 consecutive failures so one blip doesn't email — the ping URL is a secret, it lives only in the crontab, never in git) runs every 2 minutes from the same crontab (`RELAY_URL=https://relay.hivescope.xyz`; log in
 `~/backups/nostr-relay-khatru/healthcheck.log`, only written on failures/recoveries). With `BUNKER_STATUS_CMD` (the hivescope-bunker `status` command) it also alerts, with the reason in the ping body, when the
 bunker on this machine is stopped or LOCKED (after any restart it starts locked and nothing signs until `hivescope-bunker unlock`); it never

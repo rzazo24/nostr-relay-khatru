@@ -3,17 +3,21 @@
 // Pensado para el dueño del relé: este relé guarda todo lo suyo, así que sirve de copia maestra. Lo lanza cron cada noche.
 // Sin dependencias (Node 22+ trae WebSocket).
 //
-//   node rebroadcast-own.mjs <relé origen> <npub o clave hex> [--hours=48] [--dry-run]
+//   node rebroadcast-own.mjs <relé origen> <npub o clave hex> [--hours=48] [--skip-kinds=7] [--dry-run]
 //   node rebroadcast-own.mjs wss://relay.hivescope.xyz npub1... --hours=48
 //
 // Los relés destino salen de la lista de relés publicada por la cuenta (NIP-65, kind 10002: los de escritura), leída del origen o, si no
 // la tiene, de purplepag.es. A cada uno se le pregunta por id qué tiene y se le manda lo que no. Los eventos efímeros (20000-29999) no se
-// tocan. Cada relé aplica sus propias reglas: un rechazo se apunta y ya está, mañana se vuelve a intentar.
+// tocan, ni las reacciones (kind 7) salvo que se pida otra cosa con --skip-kinds: una reacción va dirigida al autor de la nota, y los relés con
+// web of trust (nostr.bitcoiner.social, offchain.pub) rechazan las que apuntan a cuentas de fuera, así que reenviarlas cada noche solo era ruido.
+// Cada relé aplica sus propias reglas: un rechazo se apunta y ya está, mañana se vuelve a intentar.
 
 const [src, who, ...flags] = process.argv.slice(2)
 const dry = flags.includes('--dry-run')
 const hours = Number(flags.find((f) => f.startsWith('--hours='))?.slice(8) || 48)
-if (!src || !who || !(hours > 0)) { console.error('Uso: node rebroadcast-own.mjs <origen> <npub|hex> [--hours=48] [--dry-run]'); process.exit(2) }
+const skipFlag = flags.find((f) => f.startsWith('--skip-kinds='))
+const skip = new Set((skipFlag ? skipFlag.slice(13) : '7').split(',').filter(Boolean).map(Number))
+if (!src || !who || !(hours > 0)) { console.error('Uso: node rebroadcast-own.mjs <origen> <npub|hex> [--hours=48] [--skip-kinds=7] [--dry-run]'); process.exit(2) }
 const WS = globalThis.WebSocket
 if (!WS) { console.error('Esta versión de Node no trae WebSocket: hace falta Node 22+.'); process.exit(2) }
 
@@ -70,8 +74,8 @@ if (!targets.length) { console.log(`${stamp} sin lista de relés publicada: nada
 const mine = new Map(); let until
 for (let page = 0; page < 20; page++) {
   const batch = await query(src, { authors: [author], since, ...(until ? { until } : {}), limit: 500 })
-  const fresh = batch.filter((e) => !mine.has(e.id) && (e.kind < 20000 || e.kind >= 30000))
-  for (const e of fresh) mine.set(e.id, e)
+  const fresh = batch.filter((e) => !mine.has(e.id))
+  for (const e of fresh) if ((e.kind < 20000 || e.kind >= 30000) && !skip.has(e.kind)) mine.set(e.id, e)
   if (batch.length < 500 || !fresh.length) break
   until = Math.min(...batch.map((e) => e.created_at))
 }
